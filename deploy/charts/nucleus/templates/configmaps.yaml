@@ -1,0 +1,27 @@
+{{- range .Values.additionalConfigMaps }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .name }}
+  labels:
+    {{- include "nucleus.labels" $ | nindent 4 }}
+    {{- with .labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- $baseAnnotations := fromYaml (include "nucleus.annotations" $) }}
+  {{- $annotations := mergeOverwrite $baseAnnotations .annotations }}
+  {{- if $annotations }}
+  annotations:
+    {{- include "nucleus.formatAnnotations" $annotations | nindent 4 }}
+  {{- end }}
+data:
+  {{- if .data }}
+  {{- if kindIs "string" .data }}
+  {{ .dataKey | default "config.yaml" }}: |
+{{ .data | indent 4 }}
+  {{- else if kindIs "map" .data }}
+  {{- toYaml .data | nindent 2 }}
+  {{- end }}
+  {{- end }}
+{{- end }}

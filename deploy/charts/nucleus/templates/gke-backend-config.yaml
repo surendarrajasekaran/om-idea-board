@@ -1,0 +1,25 @@
+{{- if and .Values.gke ( .Values.backendConfig.enabled | default false ) -}}
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ include "nucleus.fullname" . }}-backendconfig
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "nucleus.labels" . | nindent 4 }}
+spec:
+  {{- with .Values.backendConfig.healthCheck }}
+  healthCheck:
+    checkIntervalSec: {{ .checkIntervalSec | default 10 }}
+    healthyThreshold: {{ .healthyThreshold | default 3 }}
+    port: {{ .port | default 8080 }}
+    requestPath: {{ .requestPath | default "/health" }}
+    timeoutSec: {{ .timeoutSec | default 10 }}
+    type: {{ .type | default "HTTP" }}
+    unhealthyThreshold: {{ .unhealthyThreshold | default 5 }}
+  {{- end }}
+
+  {{- with .Values.backendConfig.securityPolicy }}
+  securityPolicy:
+    name: {{ . }}
+  {{- end }}
+{{- end }}

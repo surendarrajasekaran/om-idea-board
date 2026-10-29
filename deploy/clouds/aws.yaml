@@ -1,0 +1,5 @@
+# Supported by the EKS legacy service controller; no extra controller bootstrap.
+# Migrate to the organization's AWS Load Balancer Controller for production.
+service:
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: nlb

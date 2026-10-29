@@ -1,0 +1,63 @@
+{{- range .Values.additionalResources }}
+---
+{{- if kindIs "string" . }}
+{{- tpl . $ }}
+{{- else }}
+{{- if .apiVersion }}
+apiVersion: {{ .apiVersion }}
+{{- end }}
+{{- if .kind }}
+kind: {{ .kind }}
+{{- end }}
+metadata:
+  {{- if .name }}
+  name: {{ .name }}
+  {{- end }}
+  {{- if .namespace }}
+  namespace: {{ .namespace }}
+  {{- end }}
+  {{- if or .labels (include "nucleus.labels" $) }}
+  labels:
+    {{- include "nucleus.labels" $ | nindent 4 }}
+    {{- with .labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+  {{- if or .annotations (include "nucleus.annotations" $) }}
+  {{- $baseAnnotations := fromYaml (include "nucleus.annotations" $) }}
+  {{- $annotations := mergeOverwrite $baseAnnotations (.annotations | default dict) }}
+  {{- if $annotations }}
+  annotations:
+    {{- include "nucleus.formatAnnotations" $annotations | nindent 4 }}
+  {{- end }}
+  {{- end }}
+{{- if .spec }}
+spec:
+  {{- tpl (toYaml .spec) $ | nindent 2 }}
+{{- end }}
+{{- if .data }}
+data:
+  {{- tpl (toYaml .data) $ | nindent 2 }}
+{{- end }}
+{{- if .rules }}
+rules:
+  {{- tpl (toYaml .rules) $ | nindent 2 }}
+{{- end }}
+{{- if .subjects }}
+subjects:
+  {{- tpl (toYaml .subjects) $ | nindent 2 }}
+{{- end }}
+{{- if .roleRef }}
+roleRef:
+  {{- tpl (toYaml .roleRef) $ | nindent 2 }}
+{{- end }}
+{{- if .template }}
+template:
+  {{- tpl (toYaml .template) $ | nindent 2 }}
+{{- end }}
+{{- if .raw }}
+{{- tpl .raw $ }}
+{{- end }}
+{{- end }}
+{{- end }}
+

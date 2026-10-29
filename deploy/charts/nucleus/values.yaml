@@ -1,0 +1,605 @@
+# Default values for nucleus.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global configuration values that can be shared across multiple charts
+global:
+  # -- Priority class name for all pods (can be overridden per workload)
+  priorityClassName: ""
+
+  # -- Runtime class name for all pods (can be overridden per workload)
+  runtimeClassName: ""
+
+  # Global image configuration
+  image:
+    # -- Image pull secrets for private registries
+    pullSecrets: []
+    # -- Image pull policy (Always, Never, IfNotPresent)
+    pullPolicy: Always
+    # -- Default image tag (will be overridden by parent chart)
+    tag: ""
+    # -- Default image repository (will be overridden by parent chart)
+    repository: ""
+
+  # -- Host aliases for all pods
+  hostAliases: []
+
+  # -- Node selector for all pods
+  nodeSelector: {}
+
+  # -- Tolerations for all pods
+  tolerations: []
+
+  # -- Common labels applied to all resources
+  additionalLabels: {}
+
+  # -- Common annotations applied to all resources
+  additionalAnnotations: {}
+
+  # -- Annotations applied to all deployed pods
+  podAnnotations: {}
+
+  # -- Labels applied to all deployed pods
+  podLabels: {}
+
+  # -- Topology spread constraints for all pods
+  topologySpreadConstraints: []
+
+  # -- Global environment variables for all containers (key-value map)
+  env: {}
+
+# Image configuration for the main container
+image:
+  # -- Image pull policy (overrides global.image.pullPolicy if set)
+  pullPolicy: ""
+  # -- Image repository (overrides global.image.repository if set)
+  repository: "nginx"
+  # -- Image tag (overrides global.image.tag if set)
+  tag: "latest"
+  # -- Image pull secrets (overrides global.image.pullSecrets if set)
+  pullSecrets: []
+
+# -- Override the name of the chart
+nameOverride: ""
+
+# -- Override the full name of the resources
+fullnameOverride: ""
+
+# Autoscaling configuration
+autoscaling:
+  # -- Enable horizontal pod autoscaling
+  enabled: false
+
+  # -- Type of autoscaler to use (hpa, keda)
+  type: hpa
+
+  # -- Minimum number of replicas
+  minReplicas: 1
+  # -- Maximum number of replicas
+  maxReplicas: 1
+
+  # HPA (Horizontal Pod Autoscaler) specific settings
+  hpa:
+    # -- Target CPU utilization percentage
+    targetCPUUtilizationPercentage: 100
+    # -- Target memory utilization percentage
+    targetMemoryUtilizationPercentage: 100
+
+    # -- Custom HPA metrics configuration
+    # Ref: https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
+    metrics: []
+
+  # KEDA (Kubernetes Event-Driven Autoscaling) specific settings
+  keda:
+    # -- Base/fundamental scaling triggers (CPU, memory, basic metrics)
+    baseTriggers: []
+
+    # -- Additional/advanced scaling triggers (CloudWatch, custom metrics, etc.)
+    additionalTriggers: []
+
+    # -- KEDA polling interval in seconds
+    pollingInterval: 30
+
+    # -- KEDA cooldown period in seconds
+    cooldownPeriod: 180
+
+    # -- Advanced KEDA configuration options
+    advanced: {}
+
+  # -- Scaling behavior configuration for both scale up and scale down
+  behavior: {}
+    # Example configuration:
+    # scaleDown:
+    #   stabilizationWindowSeconds: 300
+    #   policies:
+    #     - type: Pods
+    #       value: 1
+    #       periodSeconds: 180
+    # scaleUp:
+    #   stabilizationWindowSeconds: 300
+    #   policies:
+    #     - type: Pods
+    #       value: 2
+    #       periodSeconds: 60
+
+# External Secrets configuration for AWS Secrets Manager integration
+externalSecrets:
+  # -- Enable external secrets integration
+  enabled: false
+  name: ""
+  annotations: {}
+  # -- Reference to the secret store
+  secretStoreRef:
+    name: aws-secrets-manager-store
+    kind: ClusterSecretStore
+  # -- Target secret configuration
+  target:
+    creationPolicy: Owner
+  # -- Data extraction configuration from external secrets
+  dataFrom: []
+  # Example configuration:
+  #   - extract:
+  #       key: myapp/production/secrets
+  #       version: "uuid/75051d5f-aeeb-4557-a93e-3e583bc19408"
+
+# Main workload configuration
+workload:
+  # -- Enable workload creation
+  enabled: false
+
+  # -- Type of Kubernetes workload (Deployment, StatefulSet)
+  kind: Deployment
+
+  # -- Annotations to add to the workload resource
+  annotations: {}
+
+  # -- Number of replicas for the workload (ignored if autoscaling is enabled)
+  replicaCount: 1
+
+  # Deployment-specific configuration
+  deployment:
+    # -- Deployment strategy configuration
+    strategy: {}
+      # Example rolling update strategy:
+      # rollingUpdate:
+      #   maxUnavailable: 0
+      #   maxSurge: 50%
+      # type: RollingUpdate
+
+# Service Account configuration
+serviceAccount:
+  # -- Create a service account
+  create: false
+  # -- Annotations to add to the service account
+  annotations: {}
+  # -- Name of the service account (auto-generated if not set)
+  name: ""
+
+# -- Annotations to add to pods
+podAnnotations: {}
+
+# -- Common labels applied to all resources
+commonLabels: {}
+  # Example configuration:
+  # environment: production
+  # team: platform
+
+# -- Common annotations applied to all resources
+commonAnnotations: {}
+  # Example configuration:
+  # argocd.argoproj.io/sync-wave: "3"
+
+# -- Security context for the pod
+podSecurityContext: {}
+  # Example configuration:
+  # fsGroup: 2000
+
+# -- Labels to add to pods
+podLabels: {}
+
+# -- Security context for containers
+securityContext: {}
+  # Example configuration:
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+# Service configuration
+service:
+  # -- Enable service creation
+  enabled: false
+  # -- Name of the service (auto-generated if not set)
+  name: ""
+  # -- Annotations to add to the service
+  annotations: {}
+  # -- Service type (ClusterIP, NodePort, LoadBalancer)
+  type: ClusterIP
+  # -- Service ports configuration
+  ports: []
+    # Example port configuration:
+    # - name: http
+    #   port: 80
+    #   targetPort: 8080
+    #   protocol: TCP
+    #   nodePort: null
+  # -- External traffic policy for LoadBalancer and NodePort services
+  externalTrafficPolicy: ""
+
+# ServiceMonitor configuration for Prometheus monitoring
+serviceMonitor:
+  # -- Enable ServiceMonitor creation for Prometheus monitoring
+  enabled: false
+  # -- ServiceMonitor endpoints configuration
+  annotations: {}
+  endpoints: []
+  # Example endpoints configuration:
+  # - interval: 1m
+  #   scheme: http
+  #   targetPort: http
+  #   path: /metrics
+  # - interval: 30s
+  #   scheme: https
+  #   targetPort: https
+  #   path: /api/metrics
+
+# -- Name of the main container (defaults to release name)
+containerName: ""
+
+# -- Container ports configuration
+containerPorts: []
+  # Example port configuration:
+  # - name: http
+  #   containerPort: 8080
+  #   protocol: TCP
+
+# -- Environment variables for the main container (key-value map)
+env: {}
+
+# -- Additional environment variables for middle-tier configuration (key-value map)
+# Use this for environment-specific overrides that are more specific than global.env
+# but less specific than component-level env
+additionalContainerEnv: {}
+
+# -- Environment variables from ConfigMaps or Secrets
+envFrom: []
+
+# -- Resource limits and requests for containers
+resources: {}
+  # Example configuration:
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# -- Runtime class name for pods (overrides global setting)
+runtimeClassName: ""
+
+# Pod Disruption Budget configuration
+podDisruptionBudget:
+  # -- Enable Pod Disruption Budget
+  enabled: false
+  # -- Minimum available pods (define either minAvailable or maxUnavailable)
+  minAvailable: 1
+  # -- Maximum unavailable pods (if set, minAvailable is ignored)
+  # maxUnavailable: 1
+
+# -- Priority class name for pods (overrides global setting)
+priorityClassName: ""
+
+# -- Node selector for pod scheduling
+nodeSelector: {}
+
+# -- Tolerations for pod scheduling
+tolerations: []
+
+# -- Affinity rules for pod scheduling
+affinity: {}
+
+# -- Topology spread constraints for pods
+topologySpreadConstraints: []
+
+# -- Additional volumes for the pod
+volumes: []
+
+# -- Volume mounts for containers
+volumeMounts: []
+
+# -- Volume claim templates for StatefulSets
+volumeClaimTemplates: []
+
+# -- Termination grace period in seconds
+terminationGracePeriodSeconds: ""
+
+# -- Automount service account token
+automountServiceAccountToken: true
+
+# -- Enable host network for pods
+hostNetwork: false
+
+# -- DNS configuration for pods
+dnsConfig: {}
+
+# -- DNS policy for pods (ClusterFirst, Default, None)
+dnsPolicy: "ClusterFirst"
+
+# -- Working directory for the main container
+workingDir: ""
+
+# -- Command override for the main container
+command: []
+
+# -- Arguments for the main container
+args: []
+
+# -- Liveness probe configuration
+# Determines if the container is running. If it fails, the container is restarted.
+livenessProbe: {}
+  # Example HTTP probe:
+  # httpGet:
+  #   path: /health
+  #   port: 8080
+  # initialDelaySeconds: 30
+  # periodSeconds: 10
+  # timeoutSeconds: 5
+  # failureThreshold: 3
+  # successThreshold: 1
+  #
+  # Example TCP probe:
+  # tcpSocket:
+  #   port: 8080
+  # initialDelaySeconds: 30
+  # periodSeconds: 10
+  #
+  # Example exec probe:
+  # exec:
+  #   command:
+  #     - cat
+  #     - /tmp/healthy
+  # initialDelaySeconds: 30
+  # periodSeconds: 10
+
+# -- Readiness probe configuration
+# Determines if the container is ready to receive traffic. If it fails, the pod is removed from service endpoints.
+readinessProbe: {}
+  # Example HTTP probe:
+  # httpGet:
+  #   path: /ready
+  #   port: 8080
+  # initialDelaySeconds: 5
+  # periodSeconds: 5
+  # timeoutSeconds: 3
+  # failureThreshold: 3
+  # successThreshold: 1
+  #
+  # Example TCP probe:
+  # tcpSocket:
+  #   port: 8080
+  # initialDelaySeconds: 5
+  # periodSeconds: 5
+  #
+  # Example exec probe:
+  # exec:
+  #   command:
+  #     - cat
+  #     - /tmp/ready
+  # initialDelaySeconds: 5
+  # periodSeconds: 5
+
+# -- Startup probe configuration
+# Determines if the container application has started. Disables liveness/readiness probes until it succeeds.
+# Useful for slow-starting containers to avoid being killed by liveness probe before they start.
+startupProbe: {}
+  # Example HTTP probe:
+  # httpGet:
+  #   path: /health
+  #   port: 8080
+  # initialDelaySeconds: 0
+  # periodSeconds: 10
+  # timeoutSeconds: 5
+  # failureThreshold: 30
+  # successThreshold: 1
+
+# -- Additional sidecar containers
+extraContainers: []
+
+# -- Propagate environment variables from main container to extra containers
+propagateEnvToExtraContainers: false
+
+# -- Init containers
+initContainers: []
+  # Example init container:
+  #  - name: download-tools
+  #    image: alpine:3
+  #    command: [sh, -c]
+  #    args:
+  #      - wget -qO /custom-tools/kubelogin.zip https://github.com/Azure/kubelogin/releases/download/v0.2.7/kubelogin-linux-amd64.zip &&
+  #        mkdir /custom-tools/tmp && unzip -d /custom-tools/tmp /custom-tools/kubelogin.zip  &&
+  #        mv /custom-tools/tmp/bin/linux_amd64/kubelogin /custom-tools/ && rm -rf custom-tools/tmp && rm /custom-tools/kubelogin.zip
+  #    volumeMounts:
+  #      - mountPath: /custom-tools
+  #        name: custom-tools
+
+# -- Additional ConfigMaps to create
+additionalConfigMaps: []
+  # Example ConfigMap:
+  # - name: custom-config
+  #   data:
+  #     custom-key: custom-value
+  #   labels:
+  #     hello: world
+  #   annotations:
+  #     flawlessbyte.dev/annotation: "value"
+
+# -- Additional Secrets to create
+additionalSecrets: []
+  # Example Secret with stringData (auto-encoded):
+  # - name: app-secrets
+  #   type: Opaque
+  #   stringData:
+  #     username: admin
+  #     password: secret-password
+  #   labels:
+  #     app: myapp
+  #   annotations:
+  #     description: "Application secrets"
+  # Example Secret with data (base64 encoded):
+  # - name: tls-secret
+  #   type: kubernetes.io/tls
+  #   data:
+  #     tls.crt: LS0tLS1CRUdJTi...
+  #     tls.key: LS0tLS1CRUdJTi...
+
+# -- Additional CronJobs to create
+additionalCronJobs: []
+  # Example CronJob:
+  # - name: backup-job
+  #   schedule: "0 2 * * *"  # Daily at 2 AM
+  #   concurrencyPolicy: Forbid
+  #   successfulJobsHistoryLimit: 3
+  #   failedJobsHistoryLimit: 1
+  #   jobTemplate:
+  #     backoffLimit: 3
+  #     template:
+  #       restartPolicy: OnFailure
+  #       serviceAccountName: backup-sa
+  #       containers:
+  #       - name: backup
+  #         image: backup-tool:latest
+  #         command: ["/bin/sh", "-c"]
+  #         args: ["backup.sh"]
+  #         resources:
+  #           requests:
+  #             cpu: 100m
+  #             memory: 128Mi
+  #         env:
+  #         - name: BACKUP_PATH
+  #           value: "/backups"
+  #       volumes:
+  #       - name: backup-storage
+  #         persistentVolumeClaim:
+  #           claimName: backup-pvc
+
+# -- Additional generic Kubernetes resources to create
+# Supports both structured format and raw YAML strings
+additionalResources: []
+  # Example 1: Structured format (recommended for simple resources)
+  # - apiVersion: v1
+  #   kind: PersistentVolumeClaim
+  #   name: data-pvc
+  #   spec:
+  #     accessModes:
+  #       - ReadWriteOnce
+  #     resources:
+  #       requests:
+  #         storage: 10Gi
+  #   labels:
+  #     app: myapp
+  # Example 2: Raw YAML string (for complex resources)
+  # - |
+  #   apiVersion: networking.k8s.io/v1
+  #   kind: NetworkPolicy
+  #   metadata:
+  #     name: allow-app
+  #   spec:
+  #     podSelector:
+  #       matchLabels:
+  #         app: myapp
+  #     policyTypes:
+  #     - Ingress
+  #     - Egress
+  #     ingress:
+  #     - from:
+  #       - podSelector:
+  #           matchLabels:
+  #             app: frontend
+
+ingress:
+  # -- Enable Ingress resource creation
+  enabled: false
+  # -- Ingress class name (if applicable)
+  className: ""
+  # -- Annotations to add to the Ingress resource
+  annotations: {}
+  # -- Hosts configuration for the Ingress
+  hosts: []
+    # Example host configuration:
+    # - host: example.com
+    #   paths:
+    #     - path: /
+    #       pathType: Prefix
+  tls: []
+    # Example TLS configuration:
+    # - hosts:
+    #   - example.com
+    #   secretName: example-tls
+gke: false
+
+backendConfig:
+  enabled: false
+  # healthCheck:
+  #   port: 8000
+  #   requestPath: /health
+  #   type: HTTP
+
+daemonset:
+  enabled: false
+
+  # annotations: {}
+  # podAnnotations: {}
+  # podLabels: {}
+
+  # updateStrategy:
+  #   type: RollingUpdate
+  #   rollingUpdate:
+  #     maxUnavailable: 1
+
+  # image:
+  #   repository: ""
+  #   tag: ""
+  #   pullPolicy: ""
+
+  # podSecurityContext: {}
+  # securityContext: {}
+
+  # command: []
+  # args: []
+  # workingDir: ""
+
+  # containerPorts: []
+
+  # resources:
+  #   requests:
+  #     cpu: 100m
+  #     memory: 128Mi
+  #   limits:
+  #     cpu: 500m
+  #     memory: 256Mi
+
+  # env: []
+  # envFrom: []
+
+  # livenessProbe: {}
+  # readinessProbe: {}
+  # startupProbe: {}
+
+  # volumes: []
+  # volumeMounts: []
+
+  # initContainers: []
+
+  # nodeSelector: {}
+  # tolerations:
+  #   - operator: Exists
+  # affinity: {}
+
+  # priorityClassName: ""
+  # terminationGracePeriodSeconds: 30
+
+  # hostNetwork: false
+  # dnsPolicy: ClusterFirst
+  # dnsConfig: {}

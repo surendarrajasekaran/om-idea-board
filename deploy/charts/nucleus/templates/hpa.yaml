@@ -1,0 +1,56 @@
+{{- if and .Values.autoscaling.enabled (eq .Values.autoscaling.type "hpa") }}
+{{- if semverCompare "<1.23-0" .Capabilities.KubeVersion.GitVersion -}}
+apiVersion: autoscaling/v2beta1
+{{- else -}}
+apiVersion: autoscaling/v2
+{{- end }}
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "nucleus.fullname" . }}
+  labels:
+    {{- include "nucleus.labels" . | nindent 4 }}
+  {{- with fromYaml (include "nucleus.annotations" .) }}
+  annotations:
+    {{- include "nucleus.formatAnnotations" . | nindent 4 }}
+  {{- end }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "nucleus.fullname" . }}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    {{- with .Values.autoscaling.hpa.metrics }}
+      {{- toYaml . | nindent 4 }}
+    {{- else }}
+    {{- if .Values.autoscaling.hpa.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        {{- if semverCompare "<1.23-0" .Capabilities.KubeVersion.GitVersion -}}
+        targetAverageUtilization: {{ .Values.autoscaling.hpa.targetCPUUtilizationPercentage }}
+        {{- else }}
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.hpa.targetCPUUtilizationPercentage }}
+        {{- end }}
+    {{- end }}
+    {{- if .Values.autoscaling.hpa.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        {{- if semverCompare "<1.23-0" .Capabilities.KubeVersion.GitVersion -}}
+        targetAverageUtilization: {{ .Values.autoscaling.hpa.targetMemoryUtilizationPercentage }}
+        {{- else }}
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.hpa.targetMemoryUtilizationPercentage }}
+        {{- end }}
+    {{- end }}
+    {{- end }}
+  {{- with .Values.autoscaling.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

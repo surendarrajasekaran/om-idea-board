@@ -1,0 +1,21 @@
+{{- if and (or (and .Values.autoscaling.enabled (gt (.Values.autoscaling.minReplicas | int) 1)) (and (not .Values.autoscaling.enabled) (gt (.Values.workload.replicaCount | int) 1))) .Values.podDisruptionBudget.enabled }}
+apiVersion: {{ ternary "policy/v1" "policy/v1beta1" (semverCompare ">=1.21.0-0" .Capabilities.KubeVersion.Version) }}
+kind: PodDisruptionBudget
+metadata:
+  labels:
+    {{- include "nucleus.labels" . | nindent 4 }}
+  name: {{ include "nucleus.fullname" . }}
+  {{- with fromYaml (include "nucleus.annotations" .) }}
+  annotations:
+    {{- include "nucleus.formatAnnotations" . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "nucleus.selectorLabels" . | nindent 6 }}
+  {{- if and .Values.podDisruptionBudget.minAvailable (not (hasKey .Values.podDisruptionBudget "maxUnavailable")) }}
+  minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
+  {{- else if .Values.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  {{- end }}
+{{- end }}

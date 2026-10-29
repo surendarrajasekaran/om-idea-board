@@ -1,0 +1,163 @@
+{{- if .Values.daemonset.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "nucleus.fullname" . }}
+  labels:
+    {{- include "nucleus.labels" . | nindent 4 }}
+  {{- with mergeOverwrite (fromYaml (include "nucleus.annotations" .)) .Values.daemonset.annotations }}
+  annotations:
+    {{- include "nucleus.formatAnnotations" . | nindent 4 }}
+  {{- end }}
+
+spec:
+  selector:
+    matchLabels:
+      {{- include "nucleus.selectorLabels" . | nindent 6 }}
+
+  updateStrategy:
+    {{- toYaml .Values.daemonset.updateStrategy | nindent 4 }}
+
+  template:
+    metadata:
+      labels:
+        {{- include "nucleus.selectorLabels" . | nindent 8 }}
+        {{- with (mergeOverwrite (deepCopy .Values.global.podLabels) .Values.daemonset.podLabels) }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with (mergeOverwrite (deepCopy .Values.global.podAnnotations) .Values.daemonset.podAnnotations) }}
+      annotations:
+        {{- include "nucleus.formatAnnotations" . | nindent 8 }}
+      {{- end }}
+
+    spec:
+      {{- with .Values.runtimeClassName | default .Values.global.runtimeClassName }}
+      runtimeClassName: {{ . }}
+      {{- end }}
+
+      {{- with .Values.image.pullSecrets | default .Values.global.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      serviceAccountName: {{ include "nucleus.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.automountServiceAccountToken }}
+
+      securityContext:
+        {{- toYaml .Values.daemonset.podSecurityContext | nindent 8 }}
+
+      {{- with .Values.daemonset.nodeSelector | default .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.daemonset.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.daemonset.tolerations | default .Values.global.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.daemonset.priorityClassName | default .Values.global.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+
+      {{- if .Values.daemonset.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.daemonset.terminationGracePeriodSeconds }}
+      {{- end }}
+
+      {{- if .Values.daemonset.hostNetwork }}
+      hostNetwork: {{ .Values.daemonset.hostNetwork }}
+      {{- end }}
+
+      dnsPolicy: {{ .Values.daemonset.dnsPolicy }}
+
+      {{- with .Values.daemonset.dnsConfig }}
+      dnsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.daemonset.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.daemonset.initContainers }}
+      initContainers:
+        {{- tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+
+      containers:
+        - name: {{ .Values.containerName | default .Release.Name }}
+
+          {{- with .Values.daemonset.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .Values.daemonset.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          securityContext:
+            {{- toYaml .Values.daemonset.securityContext | nindent 12 }}
+
+          {{- $repo := coalesce .Values.daemonset.image.repository .Values.image.repository .Values.global.image.repository }}
+          {{- $tag := coalesce .Values.daemonset.image.tag .Values.image.tag .Values.global.image.tag }}
+          {{- $pull := coalesce .Values.daemonset.image.pullPolicy .Values.image.pullPolicy .Values.global.image.pullPolicy }}
+          image: {{ $repo }}:{{ $tag }}
+          imagePullPolicy: {{ $pull }}
+
+          {{- with .Values.daemonset.containerPorts }}
+          ports:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          resources:
+            {{- toYaml .Values.daemonset.resources | nindent 12 }}
+
+          {{- $combinedEnv := include "nucleus.combinedEnv" . | trim }}
+          {{- if or $combinedEnv .Values.daemonset.env }}
+          env:
+            {{- if $combinedEnv }}
+            {{- $combinedEnv | nindent 12 }}
+            {{- end }}
+            {{- with .Values.daemonset.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+
+          {{- with .Values.daemonset.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- if .Values.daemonset.workingDir }}
+          workingDir: {{ .Values.daemonset.workingDir }}
+          {{- end }}
+
+          {{- with .Values.daemonset.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .Values.daemonset.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .Values.daemonset.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .Values.daemonset.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+{{- end }}

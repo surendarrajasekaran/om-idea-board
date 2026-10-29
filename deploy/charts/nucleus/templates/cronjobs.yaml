@@ -1,0 +1,157 @@
+{{- range .Values.additionalCronJobs }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ .name }}
+  {{- if .namespace }}
+  namespace: {{ .namespace }}
+  {{- end }}
+  labels:
+    {{- include "nucleus.labels" $ | nindent 4 }}
+    {{- with .labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- $baseAnnotations := fromYaml (include "nucleus.annotations" $) }}
+  {{- $annotations := mergeOverwrite $baseAnnotations (.annotations | default dict) }}
+  {{- if $annotations }}
+  annotations:
+    {{- include "nucleus.formatAnnotations" $annotations | nindent 4 }}
+  {{- end }}
+spec:
+  schedule: {{ .schedule | quote }}
+  {{- if .concurrencyPolicy }}
+  concurrencyPolicy: {{ .concurrencyPolicy }}
+  {{- end }}
+  {{- if .suspend }}
+  suspend: {{ .suspend }}
+  {{- end }}
+  {{- if .successfulJobsHistoryLimit }}
+  successfulJobsHistoryLimit: {{ .successfulJobsHistoryLimit }}
+  {{- end }}
+  {{- if .failedJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .failedJobsHistoryLimit }}
+  {{- end }}
+  {{- if .startingDeadlineSeconds }}
+  startingDeadlineSeconds: {{ .startingDeadlineSeconds }}
+  {{- end }}
+  jobTemplate:
+    metadata:
+      labels:
+        {{- include "nucleus.selectorLabels" $ | nindent 8 }}
+        {{- with .jobTemplate.labels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- $jobAnnotations := .jobTemplate.annotations | default dict }}
+      {{- if $jobAnnotations }}
+      annotations:
+        {{- include "nucleus.formatAnnotations" $jobAnnotations | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if .jobTemplate.completions }}
+      completions: {{ .jobTemplate.completions }}
+      {{- end }}
+      {{- if .jobTemplate.parallelism }}
+      parallelism: {{ .jobTemplate.parallelism }}
+      {{- end }}
+      {{- if .jobTemplate.backoffLimit }}
+      backoffLimit: {{ .jobTemplate.backoffLimit }}
+      {{- end }}
+      {{- if .jobTemplate.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ .jobTemplate.activeDeadlineSeconds }}
+      {{- end }}
+      {{- if .jobTemplate.ttlSecondsAfterFinished }}
+      ttlSecondsAfterFinished: {{ .jobTemplate.ttlSecondsAfterFinished }}
+      {{- end }}
+      template:
+        metadata:
+          labels:
+            {{- include "nucleus.selectorLabels" $ | nindent 12 }}
+            {{- with .jobTemplate.template.labels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- $templateAnnotations := .jobTemplate.template.annotations | default dict }}
+          {{- if $templateAnnotations }}
+          annotations:
+            {{- include "nucleus.formatAnnotations" $templateAnnotations | nindent 12 }}
+          {{- end }}
+        spec:
+          {{- with .jobTemplate.template.serviceAccountName }}
+          serviceAccountName: {{ . }}
+          {{- else }}
+          serviceAccountName: {{ include "nucleus.serviceAccountName" $ }}
+          {{- end }}
+          {{- if .jobTemplate.template.restartPolicy }}
+          restartPolicy: {{ .jobTemplate.template.restartPolicy }}
+          {{- else }}
+          restartPolicy: OnFailure
+          {{- end }}
+          {{- with .jobTemplate.template.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .jobTemplate.template.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .jobTemplate.template.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .jobTemplate.template.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .jobTemplate.template.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .jobTemplate.template.initContainers }}
+          initContainers:
+            {{- tpl (toYaml .) $ | nindent 12 }}
+          {{- end }}
+          containers:
+          {{- range .jobTemplate.template.containers }}
+          - name: {{ .name }}
+            image: {{ .image }}
+            {{- if .imagePullPolicy }}
+            imagePullPolicy: {{ .imagePullPolicy }}
+            {{- end }}
+            {{- if .command }}
+            command:
+              {{- toYaml .command | nindent 14 }}
+            {{- end }}
+            {{- if .args }}
+            args:
+              {{- toYaml .args | nindent 14 }}
+            {{- end }}
+            {{- if .env }}
+            env:
+              {{- toYaml .env | nindent 14 }}
+            {{- end }}
+            {{- if .envFrom }}
+            envFrom:
+              {{- toYaml .envFrom | nindent 14 }}
+            {{- end }}
+            {{- if .resources }}
+            resources:
+              {{- toYaml .resources | nindent 14 }}
+            {{- end }}
+            {{- if .volumeMounts }}
+            volumeMounts:
+              {{- toYaml .volumeMounts | nindent 14 }}
+            {{- end }}
+            {{- if .securityContext }}
+            securityContext:
+              {{- toYaml .securityContext | nindent 14 }}
+            {{- end }}
+            {{- if .workingDir }}
+            workingDir: {{ .workingDir }}
+            {{- end }}
+          {{- end }}
+          {{- with .jobTemplate.template.volumes }}
+          volumes:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
+

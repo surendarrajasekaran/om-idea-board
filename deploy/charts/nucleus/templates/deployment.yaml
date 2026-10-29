@@ -1,0 +1,182 @@
+{{-  if .Values.workload.enabled }}
+apiVersion: apps/v1
+kind: {{ .Values.workload.kind }}
+metadata:
+  name: {{ include "nucleus.fullname" . }}
+  labels:
+    {{- include "nucleus.labels" . | nindent 4 }}
+  {{- with mergeOverwrite (fromYaml (include "nucleus.annotations" .)) .Values.workload.annotations }}
+  annotations:
+    {{- include "nucleus.formatAnnotations" . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.workload.replicaCount }}
+  {{- end }}
+  {{- if eq .Values.workload.kind "Deployment" }}
+  strategy:
+    {{- toYaml .Values.workload.deployment.strategy | nindent 4 }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "nucleus.selectorLabels" . | nindent 6 }}
+  {{- if eq .Values.workload.kind "StatefulSet" }}
+  serviceName: {{ include "nucleus.fullname" . }}
+  {{- end }}
+  template:
+    metadata:
+      {{- with (mergeOverwrite (deepCopy .Values.global.podAnnotations) .Values.podAnnotations) }}
+      annotations:
+        {{- include "nucleus.formatAnnotations" . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "nucleus.selectorLabels" . | nindent 8 }}
+        {{- with (mergeOverwrite (deepCopy .Values.global.podLabels) .Values.podLabels) }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.runtimeClassName | default .Values.global.runtimeClassName }}
+      runtimeClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.image.pullSecrets | default .Values.global.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.global.hostAliases }}
+      hostAliases:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "nucleus.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.nodeSelector | default .Values.global.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations | default .Values.global.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints | default .Values.global.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName | default .Values.global.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- if .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
+      automountServiceAccountToken: {{ .Values.automountServiceAccountToken }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- if .Values.hostNetwork }}
+      hostNetwork: {{ .Values.hostNetwork }}
+      {{- end }}
+      {{- with .Values.dnsConfig }}
+      dnsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- tpl (toYaml .) $ | nindent 6 }}
+      {{- end }}
+      containers:
+      - name: {{ .Values.containerName | default .Release.Name }}
+        {{- with .Values.args }}
+        args:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.command }}
+        command:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 10 }}
+        {{- $repository := coalesce .Values.image.repository .Values.global.image.repository }}
+        {{- $tag := coalesce .Values.image.tag .Values.global.image.tag }}
+        {{- $pullPolicy := coalesce .Values.image.pullPolicy .Values.global.image.pullPolicy }}
+        image: {{ $repository }}:{{ $tag }}
+        imagePullPolicy: {{ $pullPolicy }}
+        {{- with .Values.containerPorts}}
+        ports:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        {{- $combinedEnv := include "nucleus.combinedEnv" . | trim }}
+        {{- if $combinedEnv }}
+        env:
+          {{- $combinedEnv | nindent 10 }}
+        {{- end }}
+        {{- with .Values.envFrom }}
+        envFrom:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- if .Values.workingDir }}
+        workingDir: {{ .Values.workingDir }}
+        {{- end }}
+        {{- with .Values.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.startupProbe }}
+        startupProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.volumeMounts }}
+        volumeMounts:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      {{- if .Values.extraContainers }}
+        {{- if .Values.propagateEnvToExtraContainers }}
+          {{- $combinedEnv := include "nucleus.combinedEnv" . | trim }}
+          {{- range .Values.extraContainers }}
+            {{- $container := tpl (toYaml .) $ | fromYaml }}
+      - name: {{ $container.name }}
+        image: {{ $container.image }}
+        {{- if $container.imagePullPolicy }}
+        imagePullPolicy: {{ $container.imagePullPolicy }}
+        {{- end }}
+        {{- if or $combinedEnv $container.env }}
+        env:
+          {{- if $combinedEnv }}
+{{ $combinedEnv | indent 10 }}
+          {{- end }}
+          {{- if $container.env }}
+          {{- toYaml $container.env | nindent 10 }}
+          {{- end }}
+        {{- end }}
+        {{- if $container.envFrom }}
+        envFrom:
+          {{- toYaml $container.envFrom | nindent 10 }}
+        {{- end }}
+        {{- if $container.resources }}
+        resources:
+          {{- toYaml $container.resources | nindent 10 }}
+        {{- end }}
+        {{- if $container.volumeMounts }}
+        volumeMounts:
+          {{- toYaml $container.volumeMounts | nindent 10 }}
+        {{- end }}
+          {{- end }}
+        {{- else }}
+          {{- tpl (toYaml .Values.extraContainers) $ | nindent 6 }}
+        {{- end }}
+      {{- end }}
+  {{- if and (eq .Values.workload.kind "StatefulSet") .Values.volumeClaimTemplates }}
+  volumeClaimTemplates:
+    {{- toYaml .Values.volumeClaimTemplates | nindent 4 }}
+  {{- end }}
+{{- end }}

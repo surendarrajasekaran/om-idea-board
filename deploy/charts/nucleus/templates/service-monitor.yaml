@@ -1,0 +1,20 @@
+{{- if .Values.serviceMonitor.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "nucleus.fullname" . }}
+  labels:
+    {{- include "nucleus.labels" . | nindent 4 }}
+  {{- $baseAnnotations := fromYaml (include "nucleus.annotations" .) }}
+  {{- $annotations := mergeOverwrite $baseAnnotations .Values.serviceMonitor.annotations }}
+  {{- if $annotations }}
+  annotations:
+    {{- include "nucleus.formatAnnotations" $annotations | nindent 4 }}
+  {{- end }}
+spec:
+  endpoints:
+    {{- toYaml .Values.serviceMonitor.endpoints | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- include "nucleus.selectorLabels" . | nindent 6 }}
+{{- end }}

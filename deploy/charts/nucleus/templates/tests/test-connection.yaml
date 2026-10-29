@@ -1,0 +1,17 @@
+{{- if and .Values.ingress (default .Values.ingress.enabled false) -}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "nucleus.fullname" . }}-test-connection"
+  labels:
+    {{- include "nucleus.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ['{{ include "nucleus.fullname" . }}:{{ (index .Values.service.ports 0).port }}']
+  restartPolicy: Never
+{{- end }}

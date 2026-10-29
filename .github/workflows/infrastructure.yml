@@ -1,0 +1,71 @@
+name: Infrastructure
+on:
+  workflow_dispatch:
+    inputs:
+      cloud:
+        type: choice
+        options: [aws, gcp]
+        required: true
+      environment:
+        type: choice
+        options: [staging, production]
+        required: true
+      operation:
+        type: choice
+        options: [plan, apply]
+        default: plan
+        required: true
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: infrastructure-${{ inputs.cloud }}-${{ inputs.environment }}
+  cancel-in-progress: false
+jobs:
+  provision:
+    if: github.ref == 'refs/heads/main'
+    # Use a runner with fixed egress matching ADMIN_CIDRS; see README.
+    runs-on: [self-hosted, linux, idea-board]
+    environment: ${{ inputs.cloud }}-${{ inputs.environment }}
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      TF_VAR_cloud: ${{ inputs.cloud }}
+      TF_VAR_environment: ${{ inputs.environment }}
+      TF_VAR_region: ${{ vars.REGION }}
+      TF_VAR_gcp_project: ${{ vars.GCP_PROJECT }}
+      TF_VAR_admin_cidrs: ${{ vars.ADMIN_CIDRS }}
+      TF_VAR_name: idea-board
+      TF_VAR_deletion_protection: "true"
+      STATE_BUCKET: ${{ vars.STATE_BUCKET }}
+      CLOUD: ${{ inputs.cloud }}
+      TARGET_ENV: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: "1.11.4", terraform_wrapper: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - if: inputs.cloud == 'aws'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          {
+            role-to-assume: "${{ vars.AWS_ROLE_ARN }}",
+            aws-region: "${{ vars.REGION }}",
+          }
+      - if: inputs.cloud == 'gcp'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+      - name: Initialize remote state
+        run: python scripts/infra_init.py --cloud "$CLOUD" --environment "$TARGET_ENV" --bucket "$STATE_BUCKET" --region "$TF_VAR_region"
+      - run: terraform -chdir=infra validate
+      - run: terraform -chdir=infra plan -out=release.tfplan
+      - if: inputs.operation == 'apply'
+        run: terraform -chdir=infra apply release.tfplan
+      - name: Explain deployment boundary
+        run: echo 'Infrastructure provisioned/planned. Run Release and deploy, or scripts/platform.py, to roll out the application.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove local sensitive plan
+        if: always()
+        run: python -c "from pathlib import Path; Path('infra/release.tfplan').unlink(missing_ok=True)"
