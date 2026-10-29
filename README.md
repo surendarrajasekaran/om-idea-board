@@ -36,7 +36,7 @@ The frontend proxies `/api/` to the backend, so browsers need no cloud-specific 
 | `infra/` | Shared cloud interface and AWS/GCP implementation modules |
 | `scripts/ai_ops.py` | Validated AI resource profile and health decisions |
 | `scripts/probe.py` | HTTP readiness measurements; no logs or idea content sent to AI |
-| `scripts/platform.py` | Laptop/CI flow: provision, publish/scan images, deploy and verify |
+| `scripts/run_platform.py` | Laptop/CI flow: provision, publish/scan images, deploy and verify |
 | `scripts/deploy.py` | Two common-chart releases and failure recovery |
 | `deploy/` | Unmodified nucleus chart and frontend/backend custom values |
 | `scripts/smoke.py` | Frontend/readiness/create/read deployment verification |

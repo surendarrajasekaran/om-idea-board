@@ -176,7 +176,7 @@ jobs:
         run: |
           args=()
           if [ "$REQUIRE_AI" = "true" ]; then args+=(--require-ai); fi
-          python scripts/platform.py --cloud "$CLOUD" --environment "$TARGET_ENV" \
+          python scripts/run_platform.py --cloud "$CLOUD" --environment "$TARGET_ENV" \
             --region "$REGION" --state-bucket "$STATE_BUCKET" --tag "$RELEASE_TAG" \
             --skip-infra --skip-build --pull-secret "$PULL_SECRET" \
             --profile artifacts/profile/profile.json \

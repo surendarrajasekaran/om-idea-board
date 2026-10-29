@@ -15,7 +15,7 @@ Source: the three-page “Dev Ops Case Study” supplied with this task. The use
 | AI resource configuration | Strict schema, local policy validation, audited JSON | Implemented and mapped to nucleus values |
 | AI intelligent health checks | Numeric probes, hard gates, bounded AI advice | Implemented and wired into rollout verification |
 | Automated application rollout/rollback | Existing common Helm chart | Implemented using supplied nucleus 1.1.0 chart |
-| CI checks / image publishing | GitHub Actions | Implemented; GitHub run pending push |
+| CI checks / image publishing | GitHub Actions | Implemented; see GitHub Actions for run results |
 | Public repository link | Existing origin `surendarrajasekaran/om-idea-board` | Target repository configured; see Git history for published commit |
 | Comprehensive README | Root README and supporting docs | Implemented |
 | Two public working URLs | Verification record | Pending cloud execution on configured laptop |

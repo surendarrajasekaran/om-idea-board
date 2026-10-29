@@ -1,6 +1,6 @@
 # Verification record
 
-Verified locally on October 29, 2026. CI workflows define repeatable checks; no GitHub-hosted run or cloud apply is claimed.
+Verified locally on October 29, 2026. CI workflows define repeatable checks; remote run results are available in the repository's GitHub Actions. No cloud apply is claimed.
 
 ## Observed local results
 
@@ -10,6 +10,7 @@ Verified locally on October 29, 2026. CI workflows define repeatable checks; no 
 | Same backend tests, PostgreSQL 16 in Docker | 11 passed |
 | AI policy tests, mocked model API | 10 passed |
 | Common-chart contract, deployment policy and recovery transaction tests | 12 passed |
+| Direct CLI import/standard-library regression check | Passed for all six entry points |
 | Patched frontend and backend container scans (Trivy, local arm64) | 0 fixable HIGH/CRITICAL findings |
 | Helm lint, frontend and backend values | Passed |
 | AWS and GCP release rendering | Passed; both parse as valid YAML |
@@ -50,3 +51,5 @@ The local preview uses Docker Compose at http://localhost:8080. Test ideas remai
 | Rollback exercise | Pending | Pending |
 
 Replace pending entries only with observed results. The deployment acceptance criteria are: public frontend works, new idea persists and appears through the API, database remains private, readiness passes, and a deliberately failed release returns to the prior healthy chart revision.
+
+The first remote CI run caught a Python 3.12 standard-library shadowing issue in the `platform.py` script name. The entry point is now `scripts/run_platform.py`, and a subprocess regression test covers every CLI. Consult GitHub Actions for the latest run status.

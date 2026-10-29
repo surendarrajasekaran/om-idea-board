@@ -35,7 +35,7 @@ To use live AI, export `OPENAI_API_KEY` and `OPENAI_MODEL`. Add `--require-ai` t
 ## 4. AWS: full provision → build/scan → deploy → verify
 
 ```sh
-.venv/bin/python scripts/platform.py \
+.venv/bin/python scripts/run_platform.py \
   --cloud aws --environment staging --region ap-south-1 \
   --state-bucket YOUR_AWS_STATE_BUCKET --var-file infra/aws.tfvars \
   --goal 'Cost-sensitive staging with reliable service'
@@ -46,7 +46,7 @@ The command applies a saved Terraform plan without a second interactive prompt. 
 ## 5. GCP: the same flow with three cloud settings changed
 
 ```sh
-.venv/bin/python scripts/platform.py \
+.venv/bin/python scripts/run_platform.py \
   --cloud gcp --environment staging --region asia-south1 \
   --state-bucket YOUR_GCP_STATE_BUCKET --var-file infra/gcp.tfvars \
   --goal 'Cost-sensitive staging with reliable service'
@@ -59,7 +59,7 @@ Clouds use different remote state. Run them sequentially in this checkout; use s
 With existing remote state and images, skip expensive stages:
 
 ```sh
-.venv/bin/python scripts/platform.py \
+.venv/bin/python scripts/run_platform.py \
   --cloud aws --environment staging --region ap-south-1 \
   --state-bucket YOUR_AWS_STATE_BUCKET --skip-infra --skip-build \
   --frontend-image ghcr.io/surendarrajasekaran/om-idea-board/frontend:COMMIT@sha256:DIGEST \

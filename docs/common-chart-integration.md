@@ -30,7 +30,7 @@ AWS documentation: https://docs.aws.amazon.com/eks/latest/userguide/network-load
 
 ## Rollout and failure recovery
 
-`scripts/platform.py` initializes matching remote state, optionally applies infrastructure, builds/publishes/scans images, obtains a run-scoped kubeconfig, then invokes `scripts/deploy.py`.
+`scripts/run_platform.py` initializes matching remote state, optionally applies infrastructure, builds/publishes/scans images, obtains a run-scoped kubeconfig, then invokes `scripts/deploy.py`.
 
 The deployer validates the profile and image references, checks Terraform cloud/environment outputs, creates the namespace, and records deployed revisions. It refuses an existing failed/pending Helm release rather than assuming a fresh installation. It updates database/optional registry Secrets through stdin, then upgrades backend and frontend with Helm's failure rollback and bounded waits. Helm 3 (`--atomic`) and Helm 4 (`--rollback-on-failure`) are supported.
 
