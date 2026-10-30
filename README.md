@@ -4,6 +4,8 @@ A small React + FastAPI + PostgreSQL application with container builds, two Terr
 
 **Current status:** The app, Docker Compose, AWS/GCP Terraform, CI, image publishing/scanning, AI planning, and common-chart deployment/rollback flow are implemented. Your nucleus 1.1.0 chart is vendored unchanged, with separate frontend/backend values. Cloud execution and real public URLs must be verified on the configured laptop; no cloud deployment success is claimed. Start with [the full-flow handoff](docs/full-flow.md).
 
+For continuation in a new AI session or on another laptop, read [the AI context handoff](docs/AI_CONTEXT.md).
+
 ## Architecture
 
 ```mermaid
