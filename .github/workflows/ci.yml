@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:16-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
         env:
           POSTGRES_USER: ideas
           POSTGRES_PASSWORD: ci-only-password
@@ -26,8 +26,9 @@ jobs:
       PYTHONPATH: backend
       TEST_DATABASE_URL: postgresql+psycopg://ideas:ci-only-password@localhost:5432/ideas
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           {
             python-version: "3.12",
@@ -38,7 +39,7 @@ jobs:
       - run: pip-audit -r backend/requirements.txt
       - run: ruff check backend scripts tests
       - run: pytest -q backend/tests
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with: { version: v3.19.0 }
       - run: python -m unittest discover -s tests -v
   frontend:
@@ -46,8 +47,9 @@ jobs:
     defaults:
       run: { working-directory: frontend }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           {
             node-version: "22",
@@ -61,20 +63,23 @@ jobs:
   infrastructure:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with: { terraform_version: "1.11.4" }
       - run: terraform -chdir=infra fmt -check -recursive
       - run: terraform -chdir=infra init -backend=false
       - run: terraform -chdir=infra validate
-      - uses: azure/setup-helm@v4
+      - run: terraform -chdir=infra test -no-color
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with: { version: v3.19.0 }
       - run: helm lint deploy/charts/nucleus -f deploy/frontend/custom-values.yaml
       - run: helm lint deploy/charts/nucleus -f deploy/backend/custom-values.yaml
   compose:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
       - run: cp .env.example .env
       - run: docker compose config --quiet
       - run: docker compose up --build --wait --wait-timeout 240
@@ -93,3 +98,11 @@ jobs:
         run: docker compose logs --no-color
       - if: always()
         run: docker compose down --volumes
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - run: python3 scripts/security_scan.py config

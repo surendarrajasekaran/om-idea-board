@@ -39,7 +39,7 @@ initContainers:
     imagePullPolicy: IfNotPresent
     command: [python, -m, app.migrate]
     envFrom:
-      - secretRef: { name: idea-board-database }
+      - secretRef: { name: idea-board-migration }
     securityContext:
       runAsNonRoot: true
       runAsUser: 10001
@@ -47,6 +47,8 @@ initContainers:
       readOnlyRootFilesystem: true
       allowPrivilegeEscalation: false
       capabilities: { drop: [ALL] }
+    volumeMounts:
+      - { name: database-ca, mountPath: /etc/postgresql/ca, readOnly: true }
     resources:
       requests: { cpu: 250m, memory: 256Mi }
       limits: { cpu: "1", memory: 512Mi }
@@ -63,3 +65,12 @@ startupProbe:
   periodSeconds: 5
   failureThreshold: 30
 podDisruptionBudget: { enabled: true, minAvailable: 1 }
+
+podSecurityContext:
+  seccompProfile: { type: RuntimeDefault }
+terminationGracePeriodSeconds: 30
+volumes:
+  - name: database-ca
+    secret: { secretName: idea-board-database-ca, defaultMode: 292 }
+volumeMounts:
+  - { name: database-ca, mountPath: /etc/postgresql/ca, readOnly: true }

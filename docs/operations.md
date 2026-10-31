@@ -2,7 +2,7 @@
 
 ## Migrations
 
-Run `python -m app.migrate` from the backend image before a release. Version one creates the ideas table if absent and serializes PostgreSQL execution with an advisory transaction lock. It never drops data. This is an initial-schema migration, not a full future migration framework. Introduce versioned Alembic migrations before changing the schema.
+Run `python -m app.migrate` from the backend image before a release. Version one creates the ideas table if absent and serializes PostgreSQL execution with an advisory transaction lock. It never drops data. Cloud init containers also create/update a distinct application login with only SELECT/INSERT and sequence usage, refusing privileged/pre-grouped runtime roles. Managed database administrators do not have unrestricted PostgreSQL superuser privileges; role bootstrap is tested under a non-superuser database owner with CREATEROLE/CREATEDB. This is an initial-schema migration, not a full future migration framework. Introduce versioned Alembic migrations before changing the schema.
 
 A successful application rollback must not roll back database data or destructive migrations automatically. Use expand/contract schema changes so the previous application version remains compatible. Test backups and restores before relying on them.
 
@@ -30,4 +30,14 @@ The list API returns all ideas to match the brief. Add cursor pagination and ret
 
 State contains database credentials. Restrict and audit state access. Rotate database passwords with a coordinated database/Secret change. Do not print `terraform output -raw database_url`, put it in command-line arguments, or copy it into a build artifact.
 
-The custom values set resource requests/limits, non-root users, disabled service-account token mounts, and disruption budgets for multiple replicas. Review base-image/Action digests, horizontal autoscaling, workload spread, cluster RBAC, TLS CA verification, and network policies before production operation. Those additional controls are not automatically supplied by this case-study flow.
+The custom values set resource requests/limits, non-root users, disabled service-account token mounts, and disruption budgets for multiple replicas. Review base-image/Action digests, horizontal autoscaling, workload spread, cluster RBAC, organization-specific TLS/PKI policy, and additional network integrations before production operation. Those additional controls are not automatically supplied by this case-study flow.
+
+## Hardened deployment operations
+
+Read [the platform review](platform-review.md) for residual risks and [the module guide](../infra/README.md) for private access, capacity and certificate configuration. Default API access is private. Production requires an existing TLS Secret and DNS hostname; staging HTTP is an explicit development/assignment tradeoff.
+
+Namespace security policies persist through application rollback. Changing private DB ranges requires updating the generated allow policies from current Terraform outputs. RDS failover remains within the allowed DB subnets; policies do not pin a transient DNS-resolved RDS IP. GKE DNS rules include the node-local resolver addresses but allow only port 53, not metadata HTTP. Do not enable blanket Internet egress to repair a missing integration; add the intended destination/port and validate it.
+
+Database and CA credentials are shared cluster Secrets, not Helm values. Rotation must coordinate the database, Secret and compatible application revisions. The rollout fingerprint includes both database URLs and the CA. Application rollback does not undo credential/CA changes or role bootstrap. Keep overlapping CA trust during rotation and validate read/write before removing old trust. The migration role's SQL diagnostics are sanitized to avoid exposing password literals.
+
+SQL connection/query/lock/idle deadlines prevent unbounded database waits. Future migrations get longer bounded deadlines and still need expand/contract design. Test restores, alert routes, TLS expiry and node/add-on upgrades on real infrastructure; none are established by the local checks.

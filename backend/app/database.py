@@ -15,7 +15,23 @@ def database_url() -> str:
     return url
 
 
-def make_engine():
+def make_engine(*, migration=False):
+    url = database_url()
+    options = {}
+    if url.startswith("postgresql"):
+        statement, lock, idle = (
+            (60000, 30000, 60000) if migration else (5000, 2000, 10000)
+        )
+        options["connect_args"] = {
+            "connect_timeout": 5,
+            "options": f"-c statement_timeout={statement} -c lock_timeout={lock} -c idle_in_transaction_session_timeout={idle}",
+        }
     return create_engine(
-        database_url(), pool_pre_ping=True, pool_size=5, max_overflow=5
+        url,
+        pool_pre_ping=True,
+        pool_size=5,
+        max_overflow=5,
+        pool_timeout=5,
+        pool_recycle=300,
+        **options,
     )

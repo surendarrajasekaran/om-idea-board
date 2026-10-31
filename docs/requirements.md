@@ -21,3 +21,5 @@ Source: the three-page “Dev Ops Case Study” supplied with this task. The use
 | Two public working URLs | Verification record | Pending cloud execution on configured laptop |
 
 AI-generated commands and generative IaC are suggestions in the case study, not mandatory features. The implementation chooses bounded resource proposals and health assessment because these provide reviewable operational value without granting a model command execution.
+
+The October 31 reuse/security pass is documented in [the module guide](../infra/README.md) and [platform review](platform-review.md). The default now uses private cluster APIs, distinct runtime/migration credentials and verified database TLS. Production requires operator-provided HTTPS credentials/DNS. These controls do not complete the pending public two-cloud deployment deliverables.

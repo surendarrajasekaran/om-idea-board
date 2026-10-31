@@ -8,14 +8,14 @@ on:
         required: true
       environment:
         type: choice
-        options: [staging, production]
+        options: [test, staging, production]
         required: true
       goal:
         description: Resource goal, such as cost-sensitive staging
         required: true
         default: Cost-sensitive staging
       deploy:
-        description: Deploy to previously provisioned infrastructure after publishing images
+        description: Direct Helm deployment (AWS test uses the separate GitOps workflow)
         type: boolean
         default: true
       require_ai:
@@ -25,7 +25,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: release-${{ inputs.cloud }}-${{ inputs.environment }}
+  group: platform-${{ vars.STACK_NAME || 'idea-board' }}-${{ inputs.cloud }}-${{ inputs.environment }}
   cancel-in-progress: false
 jobs:
   verify:
@@ -34,10 +34,12 @@ jobs:
   plan:
     needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     environment: ${{ inputs.cloud }}-${{ inputs.environment }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: "3.12" }
       - name: Generate validated release profile
         env:
@@ -50,13 +52,14 @@ jobs:
           args=()
           if [ "$REQUIRE_AI" = "true" ]; then args+=(--require-ai); fi
           python scripts/ai_ops.py "${args[@]}" --output artifacts/profile.json plan --environment "$TARGET_ENV" --goal "$GOAL"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           {
             name: "release-profile-${{ inputs.cloud }}-${{ inputs.environment }}",
             path: artifacts/profile.json,
           }
   images:
+    timeout-minutes: 30
     needs: [verify, plan]
     runs-on: ubuntu-latest
     permissions:
@@ -66,9 +69,10 @@ jobs:
       matrix:
         service: [frontend, backend]
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           {
             registry: ghcr.io,
@@ -82,7 +86,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           SERVICE: ${{ matrix.service }}
         run: echo "name=ghcr.io/${REPOSITORY,,}/$SERVICE" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         id: build
         with:
           context: ./${{ matrix.service }}
@@ -92,16 +96,11 @@ jobs:
           provenance: mode=max
           sbom: true
       - name: Scan published image
-        uses: aquasecurity/trivy-action@0.30.0
         env:
           TRIVY_USERNAME: ${{ github.actor }}
           TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          image-ref: "${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}"
-          format: table
-          exit-code: "1"
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
+          SCAN_IMAGE: ${{ steps.image.outputs.name }}@${{ steps.build.outputs.digest }}
+        run: python3 scripts/security_scan.py image "$SCAN_IMAGE"
       - name: Record immutable artifact
         env:
           IMAGE: ${{ steps.image.outputs.name }}:${{ github.sha }}
@@ -110,13 +109,14 @@ jobs:
         run: |
           mkdir -p artifacts
           printf '%s@%s\n' "$IMAGE" "$DIGEST" > "artifacts/$SERVICE-image.txt"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           { name: "${{ matrix.service }}-image", path: "artifacts/*-image.txt" }
   deploy:
     needs: [plan, images]
-    if: inputs.deploy
+    if: inputs.deploy && !(inputs.cloud == 'aws' && inputs.environment == 'test')
     runs-on: [self-hosted, linux, idea-board]
+    timeout-minutes: 90
     environment: ${{ inputs.cloud }}-${{ inputs.environment }}
     permissions:
       contents: read
@@ -125,69 +125,79 @@ jobs:
       CLOUD: ${{ inputs.cloud }}
       TARGET_ENV: ${{ inputs.environment }}
       REGION: ${{ vars.REGION }}
+      STACK_NAME: ${{ vars.STACK_NAME || 'idea-board' }}
+      TLS_SECRET: ${{ vars.TLS_SECRET }}
+      PUBLIC_HOST: ${{ vars.PUBLIC_HOST }}
       STATE_BUCKET: ${{ vars.STATE_BUCKET }}
-      GHCR_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
       GHCR_USERNAME: ${{ vars.GHCR_USERNAME || github.repository_owner }}
       PULL_SECRET: ${{ vars.REGISTRY_PULL_SECRET }}
       PUBLIC_IMAGES: ${{ vars.GHCR_IMAGES_PUBLIC }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
       REQUIRE_AI: ${{ inputs.require_ai }}
       RELEASE_TAG: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - name: Isolate Terraform working files
+        run: echo "TF_DATA_DIR=$RUNNER_TEMP/tf-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: "3.12" }
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with: { terraform_version: "1.11.4", terraform_wrapper: false }
-      - uses: azure/setup-helm@v4
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with: { version: v3.19.0 }
-      - uses: azure/setup-kubectl@v4
-        with: { version: v1.33.0 }
-      - if: inputs.cloud == 'aws'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.REGION }}
+      - uses: azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede # v4
+        with: { version: v1.35.0 }
       - if: inputs.cloud == 'gcp'
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
-      - if: inputs.cloud == 'gcp'
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2
         with: { install_components: gke-gcloud-auth-plugin }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           { pattern: "*-image", path: artifacts/images, merge-multiple: true }
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: release-profile-${{ inputs.cloud }}-${{ inputs.environment }}
           path: artifacts/profile
       - run: pip install -r scripts/requirements.txt
       - name: Require a configured registry access path
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
         run: |
           if [ -z "$GHCR_TOKEN" ] && [ -z "$PULL_SECRET" ] && [ "$PUBLIC_IMAGES" != "true" ]; then
             echo 'Set GHCR_READ_TOKEN, REGISTRY_PULL_SECRET, or GHCR_IMAGES_PUBLIC=true before deploying.'
             exit 1
           fi
+      - if: inputs.cloud == 'aws'
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.REGION }}
+      - if: inputs.cloud == 'gcp'
+        uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
       - name: Deploy, verify, and roll back on failure
+        env:
+          GHCR_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         shell: bash
         run: |
           args=()
           if [ "$REQUIRE_AI" = "true" ]; then args+=(--require-ai); fi
           python scripts/run_platform.py --cloud "$CLOUD" --environment "$TARGET_ENV" \
             --region "$REGION" --state-bucket "$STATE_BUCKET" --tag "$RELEASE_TAG" \
+            --name "$STACK_NAME" --tls-secret "$TLS_SECRET" --public-host "$PUBLIC_HOST" \
             --skip-infra --skip-build --pull-secret "$PULL_SECRET" \
             --profile artifacts/profile/profile.json \
             --frontend-image "$(cat artifacts/images/frontend-image.txt)" \
             --backend-image "$(cat artifacts/images/backend-image.txt)" "${args[@]}"
       - name: Retain sanitized deployment evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: deployment-${{ inputs.cloud }}-${{ inputs.environment }}
           path: |
-            artifacts/${{ inputs.cloud }}-${{ inputs.environment }}/deployment.json
-            artifacts/${{ inputs.cloud }}-${{ inputs.environment }}/health.json
+            artifacts/**/deployment.json
+            artifacts/**/health.json
           if-no-files-found: ignore

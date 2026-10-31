@@ -1,82 +1,50 @@
-data "aws_availability_zones" "available" { state = "available" }
-module "vpc" {
-  source               = "terraform-aws-modules/vpc/aws"
-  version              = "5.21.0"
-  name                 = var.name
-  cidr                 = "10.40.0.0/16"
-  azs                  = slice(data.aws_availability_zones.available.names, 0, 2)
-  public_subnets       = ["10.40.1.0/24", "10.40.2.0/24"]
-  private_subnets      = ["10.40.11.0/24", "10.40.12.0/24"]
-  database_subnets     = ["10.40.21.0/24", "10.40.22.0/24"]
-  enable_nat_gateway   = true
-  single_nat_gateway   = !var.ha
-  enable_dns_hostnames = true
-  public_subnet_tags   = { "kubernetes.io/role/elb" = "1" }
-  private_subnet_tags  = { "kubernetes.io/role/internal-elb" = "1" }
+module "network" {
+  source             = "./network"
+  name               = var.name
+  ha                 = var.ha
+  cidr               = var.network_cidr
+  availability_zones = var.availability_zones
+  flow_logs_enabled  = var.flow_logs_enabled
+  log_retention_days = var.log_retention_days
 }
-module "eks" {
-  source                                   = "terraform-aws-modules/eks/aws"
-  version                                  = "20.37.2"
-  cluster_name                             = var.name
-  cluster_version                          = var.kubernetes_version
-  cluster_endpoint_public_access           = true
-  cluster_endpoint_private_access          = true
-  cluster_endpoint_public_access_cidrs     = var.admin_cidrs
-  enable_cluster_creator_admin_permissions = true
-  cluster_enabled_log_types                = ["api", "audit", "authenticator"]
-  vpc_id                                   = module.vpc.vpc_id
-  subnet_ids                               = module.vpc.private_subnets
-  cluster_addons = {
-    coredns    = {}
-    kube-proxy = {}
-    vpc-cni    = { before_compute = true }
-  }
-  eks_managed_node_groups = {
-    app = {
-      ami_type       = "AL2023_x86_64_STANDARD"
-      instance_types = ["t3.medium"]
-      min_size       = 2
-      max_size       = 4
-      desired_size   = 2
-    }
-  }
+module "ecr" {
+  source = "./ecr"
+  name   = var.name
 }
-resource "aws_security_group" "database" {
-  name_prefix = "${var.name}-database-"
-  description = "PostgreSQL from EKS nodes only"
-  vpc_id      = module.vpc.vpc_id
-  ingress {
-    description     = "PostgreSQL from app nodes"
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [module.eks.node_security_group_id]
-  }
+module "kubernetes" {
+  source                  = "./kubernetes"
+  name                    = var.name
+  ha                      = var.ha
+  vpc_id                  = module.network.vpc_id
+  network_cidr            = module.network.cidr
+  database_egress_cidrs   = module.network.database_egress_cidrs
+  subnet_ids              = module.network.private_subnet_ids
+  public_cluster_endpoint = var.public_cluster_endpoint
+  admin_cidrs             = var.admin_cidrs
+  kubernetes_version      = var.kubernetes_version
+  node_pool               = var.node_pool
+  administrator_arns      = var.administrator_arns
+  enable_ssm_access       = var.enable_ssm_access
+  log_retention_days      = var.log_retention_days
 }
-resource "random_password" "database" {
-  length  = 32
-  special = false
+module "postgres" {
+  source                 = "./postgres"
+  name                   = var.name
+  ha                     = var.ha
+  vpc_id                 = module.network.vpc_id
+  node_security_group_id = module.kubernetes.node_security_group_id
+  subnet_group_name      = module.network.database_subnet_group_name
+  instance_class         = var.database_instance_class
+  database               = var.database
+  deletion_protection    = var.deletion_protection
 }
-resource "random_id" "snapshot" { byte_length = 4 }
-resource "aws_db_instance" "ideas" {
-  identifier                 = var.name
-  engine                     = "postgres"
-  engine_version             = "16"
-  instance_class             = var.ha ? "db.t3.small" : "db.t3.micro"
-  allocated_storage          = 20
-  max_allocated_storage      = 100
-  storage_encrypted          = true
-  db_name                    = "ideas"
-  username                   = "ideas"
-  password                   = random_password.database.result
-  multi_az                   = var.ha
-  publicly_accessible        = false
-  db_subnet_group_name       = module.vpc.database_subnet_group_name
-  vpc_security_group_ids     = [aws_security_group.database.id]
-  backup_retention_period    = var.ha ? 14 : 7
-  deletion_protection        = var.deletion_protection
-  skip_final_snapshot        = false
-  final_snapshot_identifier  = "${var.name}-final-${random_id.snapshot.hex}"
-  auto_minor_version_upgrade = true
-  apply_immediately          = false
+
+module "ci_registry_access" {
+  count                      = var.github_repository == "" ? 0 : 1
+  source                     = "./ci-registry-access"
+  name                       = var.name
+  github_repository          = var.github_repository
+  github_environment         = var.github_environment
+  repository_arns            = values(module.ecr.repository_arns)
+  existing_oidc_provider_arn = var.github_oidc_provider_arn
 }

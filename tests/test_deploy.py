@@ -78,6 +78,13 @@ class DeploymentPolicyTests(unittest.TestCase):
         self.assertEqual(result["image"]["pullSecrets"], [{"name": "pull-secret"}])
         self.assertNotIn("DATABASE_URL", json.dumps(result))
 
+    def test_gcp_profile_respects_cpu_memory_ratio(self):
+        self.profile["profile"].update(cpu_request="500m", memory_request="128Mi")
+        result = resource_values(self.profile, "production", "gcp")
+        self.assertEqual(
+            result["resources"]["requests"], {"cpu": "500m", "memory": "512Mi"}
+        )
+
     def test_failed_release_state_is_not_treated_as_fresh_install(self):
         deployment = Deployment("idea-board-staging", "explicit-context")
         deployment.helm = Mock(
@@ -87,6 +94,26 @@ class DeploymentPolicyTests(unittest.TestCase):
         )
         with self.assertRaises(RuntimeError):
             deployment.snapshot()
+
+    def test_recovery_url_uses_restored_service_protocol(self):
+        deployment = Deployment(
+            "idea-board-staging", "context", tls=True, public_host="new.example.com"
+        )
+        deployment.kube = Mock(
+            return_value=Mock(
+                stdout=json.dumps(
+                    {
+                        "spec": {"ports": [{"port": 80}]},
+                        "status": {
+                            "loadBalancer": {
+                                "ingress": [{"hostname": "previous.example.com"}]
+                            }
+                        },
+                    }
+                )
+            )
+        )
+        self.assertEqual(deployment.public_url(), "http://previous.example.com")
 
     def test_history_uses_known_deployed_revision(self):
         deployment = Deployment("idea-board-staging", "explicit-context")
@@ -245,7 +272,11 @@ class DeploymentTransactionTests(unittest.TestCase):
                 for key, value in {
                     "cloud": "aws",
                     "environment": "staging",
-                    "database_url": "postgresql+psycopg://ideas:never-leak-this@db/ideas",
+                    "name": "idea-board",
+                    "database_url": "postgresql+psycopg://ideas_app:never-leak-this@db/ideas",
+                    "migration_database_url": "postgresql+psycopg://ideas:migration-never-leak-this@db/ideas",
+                    "application_password": "a" * 32,
+                    "database_egress_cidrs": ["10.40.21.0/24", "10.40.22.0/24"],
                 }.items()
             }
             platform = Mock()
@@ -269,6 +300,9 @@ class DeploymentTransactionTests(unittest.TestCase):
                 patch("scripts.deploy.Deployment", return_value=platform),
                 patch(
                     "scripts.deploy.run", return_value=Mock(stdout=json.dumps(state))
+                ),
+                patch(
+                    "scripts.deploy.database_certificate", return_value="test-public-ca"
                 ),
                 patch("scripts.deploy.collect", return_value=evidence),
                 patch(

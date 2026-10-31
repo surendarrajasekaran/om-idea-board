@@ -1,12 +1,14 @@
 """Deploy two releases of the supplied nucleus chart; verify and recover on failure."""
 
 import argparse
+import copy
 import base64
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import ssl
 import subprocess
 import tempfile
 import time
@@ -18,10 +20,12 @@ try:
     from .ai_ops import PROFILE_SCHEMA, assess, validate_schema
     from .probe import collect
     from .smoke import smoke
+    from .workload_policy import namespace_resources
 except ImportError:
     from ai_ops import PROFILE_SCHEMA, assess, validate_schema
     from probe import collect
     from smoke import smoke
+    from workload_policy import namespace_resources
 
 ROOT = Path(__file__).resolve().parents[1]
 CHART = ROOT / "deploy/charts/nucleus"
@@ -66,11 +70,19 @@ def resource_values(profile, environment, cloud):
     values = validate_schema(profile.get("profile"), PROFILE_SCHEMA)
     if environment == "production" and values["replicas"] < 2:
         raise ValueError("Production requires at least two replicas")
+    if environment == "test" and (
+        values["replicas"] != 1 or values["cpu_request"] == "500m"
+    ):
+        raise ValueError(
+            "Single-worker test policy requires one replica and at most 250m CPU per component"
+        )
     cpu, memory = values["cpu_request"], values["memory_request"]
     # Portable minimums accommodate GKE Autopilot general-purpose pods.
     if cloud == "gcp":
         cpu = "250m" if cpu == "100m" else cpu
         memory = "256Mi" if memory == "128Mi" else memory
+        if cpu == "500m" and memory == "256Mi":
+            memory = "512Mi"  # Autopilot requires >=1 GiB requested memory per vCPU.
     return {
         "workload": {"replicaCount": values["replicas"]},
         "resources": {
@@ -93,11 +105,35 @@ def overrides(
     return result
 
 
+def database_certificate(cloud, outputs):
+    if cloud == "aws":
+        # Public trust material only: fixed official HTTPS URL, no provider credentials.
+        with urllib.request.urlopen(
+            "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem",
+            timeout=15,
+        ) as response:
+            certificate = response.read(262144).decode("ascii")
+    else:
+        certificate = outputs["database_ca_certificate"]["value"]
+    ssl.create_default_context().load_verify_locations(cadata=certificate)
+    return certificate
+
+
 class Deployment:
-    def __init__(self, namespace, context, timeout=600):
+    def __init__(
+        self,
+        namespace,
+        context,
+        timeout=600,
+        name="idea-board",
+        tls=False,
+        public_host="",
+    ):
         if not re.fullmatch(r"[a-z][a-z0-9-]{0,61}[a-z0-9]", namespace):
             raise ValueError("Invalid namespace")
         self.namespace, self.context, self.timeout = namespace, context, timeout
+        self.name, self.tls, self.public_host = name, tls, public_host
+        self.releases = [f"{name}-backend", f"{name}-frontend"]
         self.previous, self.attempted = {}, []
 
     def kube(self, *args, data=None, check=True):
@@ -123,7 +159,7 @@ class Deployment:
     def snapshot(self):
         # A failed list is an access/configuration error, never an empty release list.
         existing = json.loads(self.helm("list", "--all", "-o", "json").stdout)
-        for release in RELEASES:
+        for release in self.releases:
             present = next((item for item in existing if item["name"] == release), None)
             if present and present["status"] != "deployed":
                 raise RuntimeError(
@@ -234,7 +270,8 @@ class Deployment:
         return {
             f"{pod['metadata']['uid']}/{container['name']}": container["restartCount"]
             for pod in pods["items"]
-            if pod["metadata"]["labels"].get("app.kubernetes.io/instance") in RELEASES
+            if pod["metadata"]["labels"].get("app.kubernetes.io/instance")
+            in self.releases
             for container in pod.get("status", {}).get("containerStatuses", [])
         }
 
@@ -242,7 +279,9 @@ class Deployment:
         deadline = time.monotonic() + self.timeout
         while time.monotonic() < deadline:
             service = json.loads(
-                self.kube("get", "service", "idea-board-frontend", "-o", "json").stdout
+                self.kube(
+                    "get", "service", f"{self.name}-frontend", "-o", "json"
+                ).stdout
             )
             for address in (
                 service.get("status", {}).get("loadBalancer", {}).get("ingress", [])
@@ -251,16 +290,53 @@ class Deployment:
                 if host:
                     if ":" in host:
                         host = f"[{host}]"
-                    return f"http://{host}"
+                    # Recovery may restore a different Service protocol/hostname.
+                    tls = any(port["port"] == 443 for port in service["spec"]["ports"])
+                    public_host = (
+                        service.get("metadata", {})
+                        .get("annotations", {})
+                        .get("idea-board/public-host", self.public_host)
+                        if tls
+                        else ""
+                    )
+                    if public_host:
+                        print(
+                            f"Load balancer: {host}; DNS for {public_host} must point here",
+                            flush=True,
+                        )
+                    return f"{'https' if tls else 'http'}://{public_host or host}"
             time.sleep(5)
         raise RuntimeError("Timed out waiting for the public load balancer")
 
 
-def deploy(args):
+def deploy(args, *, chart=None, values_root=None):
+    chart = chart or CHART
+    values_root = values_root or ROOT / "deploy"
+    os.umask(0o077)
+    name = getattr(args, "name", "idea-board")
+    tls_secret = getattr(args, "tls_secret", "")
+    public_host = getattr(args, "public_host", "")
+    if not re.fullmatch(r"[a-z][a-z0-9-]{2,20}", name):
+        raise ValueError("Invalid stack name")
+    if args.environment == "production" and (not tls_secret or not public_host):
+        raise ValueError(
+            "Production requires --tls-secret and --public-host for verified HTTPS"
+        )
+    if tls_secret and not re.fullmatch(
+        r"[a-z0-9][a-z0-9.-]{0,251}[a-z0-9]", tls_secret
+    ):
+        raise ValueError("Invalid TLS Secret name")
+    if public_host and (
+        not tls_secret
+        or not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?", public_host)
+    ):
+        raise ValueError("Supply a DNS hostname with TLS, without a URL scheme or path")
     args.output.mkdir(parents=True, exist_ok=True)
     for filename in ("deployment.json", "health.json"):
         (args.output / filename).unlink(missing_ok=True)
     profile = json.loads(args.profile.read_text())
+    if args.require_ai and profile.get("source") != "live-ai":
+        raise ValueError("A live AI profile is required")
     # Validate everything before touching the cluster.
     settings = {
         component: overrides(
@@ -273,54 +349,149 @@ def deploy(args):
         )
         for component in ("backend", "frontend")
     }
+    for component, values in settings.items():
+        values["fullnameOverride"] = f"{name}-{component}"
+        if component == "backend":
+            values["volumes"] = [
+                {
+                    "name": "database-ca",
+                    "secret": {"secretName": f"{name}-database-ca", "defaultMode": 292},
+                }
+            ]
+            values["envFrom"] = [{"secretRef": {"name": f"{name}-database"}}]
+            # Helm evaluates this existing init container value through tpl.
+            values["initContainers"] = copy.deepcopy(
+                yaml.safe_load(
+                    (values_root / "backend/custom-values.yaml").read_text()
+                )["initContainers"]
+            )
+            values["initContainers"][0]["envFrom"] = [
+                {"secretRef": {"name": f"{name}-migration"}}
+            ]
+        else:
+            values["env"] = {"BACKEND_HOST": f"{name}-backend"}
+            values["service"] = {"annotations": {"idea-board/public-host": public_host}}
+            if tls_secret:
+                base = yaml.safe_load(
+                    (values_root / "frontend/custom-values.yaml").read_text()
+                )
+                values["env"]["TLS_LISTEN"] = (
+                    "listen 8443 ssl; ssl_certificate /etc/nginx/tls/tls.crt; ssl_certificate_key /etc/nginx/tls/tls.key;"
+                )
+                values["volumes"] = base["volumes"] + [
+                    {
+                        "name": "tls",
+                        "secret": {"secretName": tls_secret, "defaultMode": 292},
+                    }
+                ]
+                values["volumeMounts"] = base["volumeMounts"] + [
+                    {"name": "tls", "mountPath": "/etc/nginx/tls", "readOnly": True}
+                ]
+                values["service"] = {
+                    "annotations": {"idea-board/public-host": public_host},
+                    "port": 443,
+                    "ports": [
+                        {
+                            "name": "https",
+                            "port": 443,
+                            "targetPort": 8443,
+                            "protocol": "TCP",
+                        }
+                    ],
+                }
+        values["topologySpreadConstraints"] = [
+            {
+                "maxSkew": 1,
+                "topologyKey": "kubernetes.io/hostname",
+                "whenUnsatisfiable": "DoNotSchedule"
+                if args.environment == "production"
+                else "ScheduleAnyway",
+                "labelSelector": {
+                    "matchLabels": {"app.kubernetes.io/instance": f"{name}-{component}"}
+                },
+            }
+        ]
     output = args.output
     output.mkdir(parents=True, exist_ok=True)
     if args.render_only:
+        cidrs = getattr(args, "database_egress_cidr", [])
         for component, values in settings.items():
             file = output / f"{component}-values.json"
             file.write_text(json.dumps(values, indent=2) + "\n")
             command = [
                 "helm",
                 "template",
-                f"idea-board-{component}",
-                str(CHART),
+                f"{name}-{component}",
+                str(chart),
                 "-f",
-                str(ROOT / f"deploy/{component}/custom-values.yaml"),
+                str(values_root / f"{component}/custom-values.yaml"),
             ]
             if component == "frontend":
                 command += ["-f", str(ROOT / f"deploy/clouds/{args.cloud}.yaml")]
             rendered = run(command + ["-f", str(file)]).stdout
             list(yaml.safe_load_all(rendered))
             (output / f"{component}-rendered.yaml").write_text(rendered)
-        print(f"Rendered and parsed both common-chart releases in {output}")
+        controls = namespace_resources(
+            args.namespace or f"{name}-{args.environment}", name, cidrs
+        )
+        (output / "namespace-rendered.yaml").write_text(yaml.safe_dump(controls))
+        print(
+            f"Rendered and parsed both common-chart releases and namespace controls in {output}"
+        )
         return
     if not args.context:
         raise ValueError(
             "--context is required; an implicit current cluster is never used"
         )
     platform = Deployment(
-        args.namespace or f"idea-board-{args.environment}", args.context, args.timeout
+        args.namespace or f"{name}-{args.environment}",
+        args.context,
+        args.timeout,
+        name=name,
+        tls=bool(tls_secret),
+        public_host=public_host,
     )
     # Verify the output belongs to the requested cloud/environment, not another initialized state.
     outputs = json.loads(
         run(["terraform", f"-chdir={ROOT / 'infra'}", "output", "-json"]).stdout
     )
-    for key, expected in [("cloud", args.cloud), ("environment", args.environment)]:
+    for key, expected in [
+        ("cloud", args.cloud),
+        ("environment", args.environment),
+        ("name", name),
+    ]:
         if outputs[key]["value"] != expected:
             raise ValueError(f"Terraform {key} does not match requested target")
     db_url = outputs["database_url"]["value"]
     if not db_url.startswith("postgresql+psycopg://"):
         raise ValueError("Invalid Terraform database URL")
-    namespace = {
-        "apiVersion": "v1",
-        "kind": "Namespace",
-        "metadata": {"name": platform.namespace},
-    }
+    migration_url = outputs["migration_database_url"]["value"]
+    application_password = outputs["application_password"]["value"]
+    if not migration_url.startswith("postgresql+psycopg://") or migration_url == db_url:
+        raise ValueError("Separate migration credentials are required")
+    certificate = database_certificate(args.cloud, outputs)
+    namespace = namespace_resources(
+        platform.namespace, name, outputs["database_egress_cidrs"]["value"]
+    )
     run(
         ["kubectl", "--context", args.context, "apply", "-f", "-"],
         data=json.dumps(namespace),
     )
     platform.snapshot()
+    if tls_secret:
+        secret = json.loads(
+            platform.kube("get", "secret", tls_secret, "-o", "json").stdout
+        )
+        if (
+            secret.get("type") != "kubernetes.io/tls"
+            or not {"tls.crt", "tls.key"} <= secret.get("data", {}).keys()
+        ):
+            raise ValueError("TLS Secret must contain a certificate and key")
+        settings["frontend"]["podAnnotations"]["idea-board/tls-version"] = (
+            hashlib.sha256(
+                base64.b64decode(secret["data"]["tls.crt"], validate=True)
+            ).hexdigest()
+        )
     report = {
         "cloud": args.cloud,
         "environment": args.environment,
@@ -331,9 +502,18 @@ def deploy(args):
         "status": "failed",
     }
     try:
-        platform.apply_secret("idea-board-database", {"DATABASE_URL": db_url})
+        platform.apply_secret(f"{name}-database-ca", {"ca.crt": certificate})
+        platform.apply_secret(f"{name}-database", {"DATABASE_URL": db_url})
+        platform.apply_secret(
+            f"{name}-migration",
+            {
+                "DATABASE_URL": migration_url,
+                "APP_DATABASE_USER": "ideas_app",
+                "APP_DATABASE_PASSWORD": application_password,
+            },
+        )
         settings["backend"]["podAnnotations"]["idea-board/database-version"] = (
-            hashlib.sha256(db_url.encode()).hexdigest()
+            hashlib.sha256((db_url + migration_url + certificate).encode()).hexdigest()
         )
         token = os.environ.get("GHCR_TOKEN")
         if token:
@@ -343,13 +523,13 @@ def deploy(args):
             auth = base64.b64encode(f"{username}:{token}".encode()).decode()
             config = json.dumps({"auths": {"ghcr.io": {"auth": auth}}})
             platform.apply_secret(
-                args.pull_secret or "idea-board-registry",
+                args.pull_secret or f"{name}-registry",
                 {".dockerconfigjson": config},
                 "kubernetes.io/dockerconfigjson",
             )
             for component in settings:
                 settings[component]["image"]["pullSecrets"] = [
-                    {"name": args.pull_secret or "idea-board-registry"}
+                    {"name": args.pull_secret or f"{name}-registry"}
                 ]
         baseline = platform.restart_counts()
         with tempfile.TemporaryDirectory(prefix="idea-board-values-") as directory:
@@ -357,7 +537,7 @@ def deploy(args):
                 values_file = Path(directory) / f"{component}.json"
                 values_file.write_text(json.dumps(settings[component]))
                 platform.upgrade(
-                    f"idea-board-{component}", component, values_file, args.cloud
+                    f"{name}-{component}", component, values_file, args.cloud
                 )
         url = platform.public_url()
         report["url"] = url
@@ -401,8 +581,8 @@ def deploy(args):
     except Exception as exc:
         report["failure_type"] = type(exc).__name__
         report["recovery"] = platform.recover()
-        if platform.previous.get("idea-board-frontend") and platform.previous.get(
-            "idea-board-backend"
+        if platform.previous.get(f"{name}-frontend") and platform.previous.get(
+            f"{name}-backend"
         ):
             try:
                 recovered = collect(platform.public_url(), 10, 0)
@@ -423,17 +603,26 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cloud", choices=["aws", "gcp"], required=True)
     parser.add_argument(
-        "--environment", choices=["staging", "production"], required=True
+        "--environment", choices=["test", "staging", "production"], required=True
     )
     parser.add_argument("--frontend-image", required=True)
     parser.add_argument("--backend-image", required=True)
     parser.add_argument("--profile", type=Path, required=True)
     parser.add_argument("--context")
     parser.add_argument("--namespace")
+    parser.add_argument("--name", default="idea-board")
+    parser.add_argument("--tls-secret", default="")
+    parser.add_argument("--public-host", default="")
     parser.add_argument("--pull-secret", default="")
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--require-ai", action="store_true")
     parser.add_argument("--render-only", action="store_true")
+    parser.add_argument(
+        "--database-egress-cidr",
+        action="append",
+        default=[],
+        help="Private DB range for render-only; repeat for multiple subnets",
+    )
     parser.add_argument("--output", type=Path, default=ROOT / "artifacts/deployment")
     args = parser.parse_args()
     try:

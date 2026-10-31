@@ -10,6 +10,11 @@ import subprocess
 import sys
 import tempfile
 
+try:
+    from .deploy import image_values, resource_values
+except ImportError:
+    from deploy import image_values, resource_values
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -21,10 +26,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cloud", choices=["aws", "gcp"], required=True)
     parser.add_argument(
-        "--environment", choices=["staging", "production"], default="staging"
+        "--environment", choices=["test", "staging", "production"], default="staging"
     )
     parser.add_argument("--region", required=True)
+    parser.add_argument("--name", default="idea-board")
+    parser.add_argument(
+        "--public-host", default="", help="DNS name covered by the TLS certificate"
+    )
+    parser.add_argument(
+        "--tls-secret",
+        default="",
+        help="Existing TLS Secret for public HTTPS; required in production",
+    )
     parser.add_argument("--state-bucket", required=True)
+    parser.add_argument("--state-kms-key-id", default="")
     parser.add_argument(
         "--var-file",
         type=Path,
@@ -51,6 +66,7 @@ def main():
     parser.add_argument("--pull-secret", default="")
     parser.add_argument("--profile", type=Path, help="Reuse a prepared release profile")
     args = parser.parse_args()
+    os.umask(0o077)
     tools = ["terraform", "helm", "kubectl", "aws" if args.cloud == "aws" else "gcloud"]
     if not args.skip_build:
         tools.append("docker")
@@ -59,6 +75,36 @@ def main():
         parser.error("Install required tools: " + ", ".join(missing))
     if not args.skip_infra and not args.var_file:
         parser.error("--var-file is required when provisioning")
+    if args.var_file and not args.var_file.is_file():
+        parser.error("--var-file must reference an existing file")
+    if not re.fullmatch(r"[a-z][a-z0-9-]{2,20}", args.name):
+        parser.error("Invalid stack name")
+    if args.environment == "production" and (
+        not args.tls_secret or not args.public_host
+    ):
+        parser.error("Production requires --tls-secret and --public-host for HTTPS")
+    if args.public_host and (
+        not args.tls_secret
+        or not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?", args.public_host)
+    ):
+        parser.error("Supply a DNS hostname with TLS, without a URL scheme or path")
+    if args.tls_secret and not re.fullmatch(
+        r"[a-z0-9][a-z0-9.-]{0,251}[a-z0-9]", args.tls_secret
+    ):
+        parser.error("Invalid TLS Secret name")
+    if not args.skip_build and (args.frontend_image or args.backend_image):
+        parser.error("Explicit image references require --skip-build")
+    if (
+        os.environ.get("GHCR_TOKEN") or os.environ.get("GHCR_PUBLISH_TOKEN")
+    ) and not os.environ.get("GHCR_USERNAME"):
+        parser.error("GHCR_USERNAME is required with registry tokens")
+    if not args.skip_build and not os.environ.get("GHCR_PUBLISH_TOKEN"):
+        parser.error(
+            "Set GHCR_PUBLISH_TOKEN for builds; GHCR_TOKEN is reserved for cluster read access"
+        )
+    for reference in (args.frontend_image, args.backend_image):
+        if reference:
+            image_values(reference)
     tag = (
         args.tag
         or subprocess.check_output(
@@ -69,7 +115,12 @@ def main():
         parser.error("Use an explicit release tag, not latest")
     if not re.fullmatch(r"[a-z0-9][a-z0-9./_-]+", args.image_prefix):
         parser.error("Invalid image prefix")
-    output = ROOT / "artifacts" / f"{args.cloud}-{args.environment}"
+    suffix = (
+        f"{args.cloud}-{args.environment}"
+        if args.name == "idea-board"
+        else f"{args.name}-{args.cloud}-{args.environment}"
+    )
+    output = ROOT / "artifacts" / suffix
     output.mkdir(parents=True, exist_ok=True)
     for filename in ("deployment.json", "health.json"):
         (output / filename).unlink(missing_ok=True)
@@ -91,12 +142,16 @@ def main():
                 args.goal,
             ]
         )
-    elif args.require_ai and json.loads(profile.read_text()).get("source") != "live-ai":
+    prepared = json.loads(profile.read_text())
+    resource_values(prepared, args.environment, args.cloud)
+    if args.require_ai and prepared.get("source") != "live-ai":
         parser.error("A live AI profile is required")
     execute(
         [
             sys.executable,
             "scripts/infra_init.py",
+            "--kms-key-id",
+            args.state_kms_key_id,
             "--cloud",
             args.cloud,
             "--environment",
@@ -105,6 +160,8 @@ def main():
             args.state_bucket,
             "--region",
             args.region,
+            "--name",
+            args.name,
         ]
     )
     if not args.skip_infra:
@@ -119,6 +176,7 @@ def main():
                     f"-var=cloud={args.cloud}",
                     f"-var=environment={args.environment}",
                     f"-var=region={args.region}",
+                    f"-var=name={args.name}",
                     "-out=release.tfplan",
                 ]
             )
@@ -135,6 +193,7 @@ def main():
         ("cloud", args.cloud),
         ("environment", args.environment),
         ("region", args.region),
+        ("name", args.name),
     ]:
         if outputs[key]["value"] != expected:
             raise ValueError(f"Terraform {key} does not match requested target")
@@ -144,12 +203,8 @@ def main():
         for component in ("frontend", "backend")
     }
     if not args.skip_build:
-        if args.frontend_image or args.backend_image:
-            parser.error("Explicit image references require --skip-build")
-        if os.environ.get("GHCR_TOKEN"):
-            username = os.environ.get("GHCR_USERNAME")
-            if not username:
-                parser.error("GHCR_USERNAME is required with GHCR_TOKEN")
+        if os.environ.get("GHCR_PUBLISH_TOKEN"):
+            username = os.environ["GHCR_USERNAME"]
             execute(
                 [
                     "docker",
@@ -159,7 +214,7 @@ def main():
                     username,
                     "--password-stdin",
                 ],
-                input=os.environ["GHCR_TOKEN"],
+                input=os.environ["GHCR_PUBLISH_TOKEN"],
                 text=True,
                 stdout=subprocess.DEVNULL,
             )
@@ -184,31 +239,8 @@ def main():
             )
             digest = json.loads(metadata.read_text())["containerimage.digest"]
             images[component] = image + "@" + digest
-            # Match the release workflow's vulnerability gate before any rollout.
-            scan_env = {
-                **os.environ,
-                "TRIVY_USERNAME": os.environ.get("GHCR_USERNAME", ""),
-                "TRIVY_PASSWORD": os.environ.get("GHCR_TOKEN", ""),
-            }
             execute(
-                [
-                    "docker",
-                    "run",
-                    "--rm",
-                    "-e",
-                    "TRIVY_USERNAME",
-                    "-e",
-                    "TRIVY_PASSWORD",
-                    "aquasec/trivy:0.66.0",
-                    "image",
-                    "--exit-code",
-                    "1",
-                    "--severity",
-                    "HIGH,CRITICAL",
-                    "--ignore-unfixed",
-                    images[component],
-                ],
-                env=scan_env,
+                [sys.executable, "scripts/security_scan.py", "image", images[component]]
             )
     # Keep kubeconfig scoped to this run; never change the user's default context.
     with tempfile.TemporaryDirectory(prefix="idea-board-kube-") as directory:
@@ -225,7 +257,7 @@ def main():
                     "--name",
                     cluster,
                     "--alias",
-                    f"idea-board-aws-{args.environment}",
+                    f"{args.name}-aws-{args.environment}",
                 ],
                 env=env,
                 stdout=subprocess.DEVNULL,
@@ -255,6 +287,12 @@ def main():
                 "scripts/deploy.py",
                 "--cloud",
                 args.cloud,
+                "--name",
+                args.name,
+                "--tls-secret",
+                args.tls_secret,
+                "--public-host",
+                args.public_host,
                 "--environment",
                 args.environment,
                 "--context",
@@ -278,7 +316,28 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        with tempfile.TemporaryDirectory(prefix="idea-board-docker-") as docker_config:
+            original_config = Path(
+                os.environ.get("DOCKER_CONFIG", str(Path.home() / ".docker"))
+            )
+            # Preserve the selected daemon and builder, but never its credential helpers/auths.
+            config_file = original_config / "config.json"
+            config = (
+                json.loads(config_file.read_text()) if config_file.is_file() else {}
+            )
+            config = {
+                key: value
+                for key, value in config.items()
+                if key not in {"auths", "credsStore", "credHelpers"}
+            }
+            (Path(docker_config) / "config.json").write_text(json.dumps(config))
+            for folder in ("buildx", "contexts"):
+                if (original_config / folder).exists():
+                    (Path(docker_config) / folder).symlink_to(
+                        original_config / folder, target_is_directory=True
+                    )
+            os.environ["DOCKER_CONFIG"] = docker_config
+            main()
     except (subprocess.CalledProcessError, ValueError, OSError) as exc:
         print(
             f"Platform flow failed ({type(exc).__name__}); no success claimed.",

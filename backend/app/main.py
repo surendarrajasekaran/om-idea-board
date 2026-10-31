@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -81,6 +82,11 @@ async def database_error(request: Request, exc: SQLAlchemyError):
 @app.get("/health/live", include_in_schema=False)
 def live():
     return {"status": "ok"}
+
+
+@app.get("/health/release", include_in_schema=False)
+def release():
+    return {"release_id": os.environ.get("RELEASE_ID", "local")}
 
 
 @app.get("/health/ready", include_in_schema=False)

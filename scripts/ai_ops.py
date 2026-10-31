@@ -50,10 +50,22 @@ def validate_schema(data, schema):
 
 
 def ask_model(task, payload, schema):
-    key = os.environ.get("OPENAI_API_KEY")
-    model = os.environ.get("OPENAI_MODEL")
+    provider = os.environ.get("AI_PROVIDER", "openai")
+    endpoints = {
+        "openai": ("https://api.openai.com/v1/responses", "OPENAI_API_KEY"),
+        "nvidia": (
+            "https://integrate.api.nvidia.com/v1/chat/completions",
+            "NVIDIA_API_KEY",
+        ),
+        "groq": ("https://api.groq.com/openai/v1/chat/completions", "GROQ_API_KEY"),
+    }
+    if provider not in endpoints:
+        raise AIUnavailable("Unsupported AI_PROVIDER; choose openai, nvidia or groq")
+    endpoint, key_variable = endpoints[provider]
+    key = os.environ.get("AI_API_KEY") or os.environ.get(key_variable)
+    model = os.environ.get("AI_MODEL") or os.environ.get("OPENAI_MODEL")
     if not key or not model:
-        raise AIUnavailable("OPENAI_API_KEY and OPENAI_MODEL are required for live AI")
+        raise AIUnavailable("Configure a provider API key and AI_MODEL for live AI")
     body = {
         "model": model,
         "store": False,
@@ -74,8 +86,33 @@ def ask_model(task, payload, schema):
             }
         },
     }
+    if provider != "openai":
+        body = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": body["instructions"]
+                    + " Return one JSON object matching this schema: "
+                    + json.dumps(schema),
+                },
+                {"role": "user", "content": json.dumps(payload)},
+            ],
+            "temperature": 0,
+            "max_tokens": 1200,
+            "response_format": {"type": "json_object"},
+        }
+        if provider == "groq":
+            body["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "deployment_assessment",
+                    "strict": True,
+                    "schema": schema,
+                },
+            }
     request = urllib.request.Request(
-        "https://api.openai.com/v1/responses",
+        endpoint,
         data=json.dumps(body).encode(),
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         method="POST",
@@ -83,6 +120,11 @@ def ask_model(task, payload, schema):
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             envelope = json.load(response)
+        if provider != "openai":
+            choice = envelope["choices"][0]
+            if choice.get("finish_reason") != "stop":
+                raise AIUnavailable("Model response did not complete")
+            return validate_schema(json.loads(choice["message"]["content"]), schema)
         if envelope.get("status") != "completed":
             raise AIUnavailable("Model response did not complete")
         chunks = [
@@ -92,13 +134,21 @@ def ask_model(task, payload, schema):
             if part.get("type") == "output_text"
         ]
         return validate_schema(json.loads("".join(chunks)), schema)
-    except (urllib.error.URLError, TimeoutError, ValueError, KeyError) as exc:
+    except (
+        urllib.error.URLError,
+        TimeoutError,
+        ValueError,
+        KeyError,
+        TypeError,
+        IndexError,
+        AttributeError,
+    ) as exc:
         # Do not log request headers, response bodies, or provider errors containing user data.
         raise AIUnavailable(f"AI request failed ({type(exc).__name__})") from None
 
 
 def plan(environment, goal, require_ai=False):
-    if environment not in ("staging", "production"):
+    if environment not in ("test", "staging", "production"):
         raise ValueError("Unknown environment")
     if not 1 <= len(goal.strip()) <= 1000:
         raise ValueError("Goal must contain 1-1000 characters")
@@ -120,6 +170,12 @@ def plan(environment, goal, require_ai=False):
         )
         if environment == "production" and proposal["replicas"] < 2:
             raise ValueError("Production policy requires at least two replicas")
+        if environment == "test" and (
+            proposal["replicas"] != 1 or proposal["cpu_request"] == "500m"
+        ):
+            raise ValueError(
+                "Single-worker test policy requires one replica and at most 250m CPU per component"
+            )
         source = "live-ai"
     except (AIUnavailable, ValueError) as exc:
         if require_ai:
@@ -150,7 +206,17 @@ def validate_samples(data):
     return data
 
 
-def assess(data, require_ai=False):
+def assess(data, require_ai=False, *, http_only=False):
+    if http_only:
+        if not isinstance(data, dict) or set(data) != {
+            "requests",
+            "failures",
+            "p95_latency_ms",
+        }:
+            raise ValueError(
+                "HTTP-only evidence must contain only requests, failures and p95_latency_ms"
+            )
+        data = {**data, "restarts": 0}
     data = validate_samples(data)
     violations = []
     if data["failures"] / data["requests"] > 0.05:
@@ -162,7 +228,17 @@ def assess(data, require_ai=False):
     ai = None
     try:
         ai = validate_schema(
-            ask_model("Assess post-deployment health", data, HEALTH_SCHEMA),
+            ask_model(
+                "Assess post-deployment HTTP health; container restart telemetry is unavailable"
+                if http_only
+                else "Assess post-deployment health",
+                {
+                    key: value
+                    for key, value in data.items()
+                    if not http_only or key != "restarts"
+                },
+                HEALTH_SCHEMA,
+            ),
             HEALTH_SCHEMA,
         )
     except (AIUnavailable, ValueError):
@@ -178,7 +254,14 @@ def assess(data, require_ai=False):
         "decision": "rollback" if rollback else "keep",
         "source": "live-ai" if ai else "policy-fallback",
         "policy_violations": violations,
-        "evidence": data,
+        "evidence": {
+            key: value
+            for key, value in data.items()
+            if not http_only or key != "restarts"
+        },
+        "telemetry_coverage": "http-only"
+        if http_only
+        else "http-and-container-restarts",
         "summary": ai["summary"]
         if ai
         else ("; ".join(violations) or "All deterministic health gates passed."),
@@ -194,7 +277,7 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     planner = commands.add_parser("plan")
     planner.add_argument(
-        "--environment", choices=["staging", "production"], required=True
+        "--environment", choices=["test", "staging", "production"], required=True
     )
     planner.add_argument("--goal", required=True)
     health = commands.add_parser("health")

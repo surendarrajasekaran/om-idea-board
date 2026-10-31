@@ -2,7 +2,9 @@
 
 A small React + FastAPI + PostgreSQL application with container builds, two Terraform cloud adapters, and bounded AI tools for release planning and health assessment.
 
-**Current status:** The app, Docker Compose, AWS/GCP Terraform, CI, image publishing/scanning, AI planning, and common-chart deployment/rollback flow are implemented. Your nucleus 1.1.0 chart is vendored unchanged, with separate frontend/backend values. Cloud execution and real public URLs must be verified on the configured laptop; no cloud deployment success is claimed. Start with [the full-flow handoff](docs/full-flow.md).
+**Current status:** Local application/platform verification passes. AWS test provisioning in `mit-qa` / `us-west-2` is in progress, with private RDS and ECR created; Kubernetes/Argo/public endpoint verification is pending. AWS delivery now has an ECR → separate GitOps repository → Argo CD path. GCP deployment and the second public URL remain pending. The supplied nucleus 1.1.0 chart stays unchanged. See [verification](docs/verification.md), the [module guide](infra/README.md) and [platform/security review](docs/platform-review.md).
+
+The AWS test delivery path now uses private ECR and a separate Argo CD GitOps repository. Read the [GitOps guide](docs/gitops.md) for the two-repository pipeline, private-cluster administration, NVIDIA/Groq/OpenAI providers and guarded recovery. Observed cloud progress is tracked in [verification](docs/verification.md).
 
 For continuation in a new AI session or on another laptop, read [the AI context handoff](docs/AI_CONTEXT.md).
 
@@ -14,7 +16,7 @@ flowchart LR
   Web -->|same-origin /api| API[FastAPI :8000]
   API --> DB[(Private PostgreSQL)]
   Git[GitHub] --> CI[Tests / builds / image scan]
-  CI --> Registry[GHCR: commit tag + digest]
+  CI --> Registry[ECR for AWS / GHCR for legacy flow: immutable digest]
   Goal[Environment + resource goal] --> AI[AI structured proposal]
   AI --> Policy[Schema + resource policy]
   Policy --> Profile[Release profile artifact]
@@ -22,7 +24,9 @@ flowchart LR
   Profile --> Chart
   TF[Shared Terraform interface] --> AWS[AWS: VPC / EKS / RDS]
   TF --> GCP[GCP: VPC / GKE / Cloud SQL]
-  Chart --> AWS
+  Chart --> GitOps[AWS desired state in infra-helm-charts]
+  GitOps --> Argo[Argo CD inside EKS]
+  Argo --> AWS
   Chart --> GCP
 ```
 
@@ -78,6 +82,7 @@ Changing the database password after first startup also requires changing the ex
 | GET | `/api/ideas` | JSON array of ideas |
 | POST | `/api/ideas` | Accepts `{"content":"..."}`; returns saved idea, HTTP 201 |
 | GET | `/health/live` | Process liveness (frontend and backend) |
+| GET | `/health/release` | Backend release identity plus frontend release header for GitOps convergence |
 | GET | `/health/ready` | API can query the migrated ideas table; 503 otherwise |
 | GET | `/metrics` | Backend-only Prometheus counters and latency histogram |
 | GET | `/docs` | Backend-only generated API documentation |
@@ -120,7 +125,7 @@ npm --prefix frontend run dev
 
 ## Cloud-agnostic approach
 
-The application containers, database schema, AI policies, and eventual common-chart deployment are shared. Terraform normalizes cloud-specific services behind one interface:
+The application containers, database schema, AI policies, and common-chart deployment are shared. Terraform normalizes cloud-specific services behind one interface:
 
 | Capability | AWS adapter | GCP adapter |
 | --- | --- | --- |
@@ -128,17 +133,17 @@ The application containers, database schema, AI policies, and eventual common-ch
 | PostgreSQL | RDS PostgreSQL 16 | Cloud SQL PostgreSQL 16 |
 | Networking | VPC, two AZs, public/private/database subnets, NAT | VPC, pod/service secondary ranges, Cloud NAT, private service access |
 | Database access | Private RDS security group allows EKS nodes | Private Cloud SQL IP with encrypted connections |
-| Control plane | Public API restricted to `admin_cidrs`; private endpoint enabled | Authorized networks restrict public API; private worker nodes |
+| Control plane | Private API by default; explicit public opt-in restricted to trusted CIDRs | Private API and worker nodes; authorized networks enforced |
 | Production database | Multi-AZ, 14-day backups | Regional availability, PITR |
 | Remote state | Encrypted S3 with native lock file | GCS with native locking |
 
-Switch cloud using `cloud`, `region`, and (for GCP) `gcp_project`; credentials and the remote state bucket also differ. Environment (`staging` or `production`) sets database availability. Node sizes are intentionally adapter-owned, rather than claiming AWS and GCP instance types are interchangeable. Adding a third provider means implementing the same outputs (`cluster_name`, sensitive `database_url`) and adding authentication/state initialization for that provider.
+Switch cloud using `cloud`, `region`, and (for GCP) `gcp_project`; credentials and the remote state bucket also differ. Environment (`test`, `staging` or `production`) sets database availability. Node sizes are intentionally adapter-owned, rather than claiming AWS and GCP instance types are interchangeable. Adding a third provider means implementing the same outputs (`cluster_name`, sensitive `database_url`) and adding authentication/state initialization for that provider.
 
-The initial migration is additive and serialized by a PostgreSQL advisory lock. Containers run under non-root users. Production backend uses the distribution-patched PostgreSQL client library rather than bundled binary-wheel libraries; runtime package upgrades are applied during image builds. Database storage encryption, backups, and deletion protection are enabled. Cloud connections require TLS. `sslmode=require` encrypts traffic; certificate identity verification with a managed CA bundle is a separate hardening step.
+The initial migration is additive and serialized by a PostgreSQL advisory lock. Containers run under non-root users. Production backend uses the distribution-patched PostgreSQL client library rather than bundled binary-wheel libraries; runtime package upgrades are applied during image builds. Database storage encryption, backups, and deletion protection are enabled. Cloud connections verify trust: RDS uses `verify-full` with its official CA bundle, and Cloud SQL uses `verify-ca` with its unique per-instance CA. Only migration init containers receive administrator credentials; the API receives a separate SELECT/INSERT role. Namespace policies deny other network paths and enforce Restricted Pod Security. See the module guide for CA rotation and identity-verification limits.
 
 ## Provision infrastructure locally
 
-Prerequisites: Terraform 1.10+, AWS CLI or Google Cloud CLI, appropriate cloud account/project permissions, billing enabled, and your administrator/CI runner's fixed public egress CIDRs. No credentials are included in this repository.
+Prerequisites: Terraform 1.10+, AWS CLI or Google Cloud CLI, appropriate cloud account/project permissions, billing enabled, and private runner/VPN connectivity and the administrator/runner source CIDRs visible to the API (or an explicit restricted public endpoint opt-in). No credentials are included in this repository.
 
 1. Create a dedicated remote-state bucket outside this stack. For S3: enable encryption, versioning, block public access, and permit state read/write plus `.tflock` read/write/delete. For GCS: enable uniform bucket-level access and versioning and grant object read/write/delete to the Terraform identity. Use separate buckets or prefixes per environment, with narrow IAM access. **Terraform state contains the database password; sensitive outputs do not remove it from state.**
 2. Authenticate with `aws sso login` / your AWS role or `gcloud auth application-default login`.
@@ -181,7 +186,7 @@ These are trust roots created by the account administrator before the infrastruc
 
 - **AWS:** configure GitHub's OIDC provider and an IAM role. Restrict trust to your repository's exact environment subject, for example `repo:OWNER/REPO:environment:aws-staging`, and audience `sts.amazonaws.com`. Grant the reviewed permissions to manage this stack, state bucket objects, IAM roles needed by EKS, and `iam:PassRole`. Do not use unrestricted account administrator access as the permanent CI policy. The infrastructure creator receives EKS administration; a different deployment identity needs an explicit EKS access entry.
 - **GCP:** configure a Workload Identity Pool/provider and service account. Restrict federation to the repository and intended environment/branch. Grant `roles/iam.workloadIdentityUser` to that restricted principal. The provisioning identity needs compute/network, GKE, Cloud SQL, service usage, and state-object administration for the selected project/bucket. The deployment identity needs GKE access plus Kubernetes RBAC.
-- **Runner:** infrastructure uses a trusted self-hosted Linux runner with labels `self-hosted`, `linux`, `idea-board`, fixed egress, Python, and network access to cloud APIs. Include its egress CIDR in `ADMIN_CIDRS`. Do not run untrusted PR code on that runner. App verification and image builds use GitHub-hosted runners.
+- **Runner:** infrastructure uses a trusted self-hosted Linux runner with labels `self-hosted`, `linux`, `idea-board`, fixed egress, Python, and network access to cloud APIs. Provide private routing to the cluster API and include the source CIDR visible there in `ADMIN_CIDRS`. Public egress CIDRs apply only when explicitly enabling a public endpoint. Do not run untrusted PR code on that runner. App verification and image builds use GitHub-hosted runners.
 
 Set these **environment variables** in GitHub Settings → Environments:
 
@@ -189,7 +194,11 @@ Set these **environment variables** in GitHub Settings → Environments:
 | --- | --- | --- |
 | `REGION` | e.g. `ap-south-1` | e.g. `asia-south1` |
 | `STATE_BUCKET` | Existing S3 state bucket | Existing GCS state bucket |
-| `ADMIN_CIDRS` | JSON array of trusted CIDRs | JSON array of trusted CIDRs |
+| `ADMIN_CIDRS` | JSON array of trusted runner/VPN CIDRs, /24 or narrower | Same, as seen by the private API |
+| `STACK_NAME` | Optional resource/state prefix; default `idea-board` | Same |
+| `INFRA_TFVARS_JSON` | Optional non-secret JSON for capacity/network policy | Same |
+| `AWS_ADMINISTRATOR_ARNS` | Optional JSON array of stable EKS administrator role ARNs | — |
+| `TLS_SECRET` / `PUBLIC_HOST` | Required for production HTTPS; existing namespace TLS Secret and owned DNS name | Same |
 | `AWS_ROLE_ARN` | GitHub OIDC provisioning role | — |
 | `GCP_PROJECT` | — | GCP project ID |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | — | Full provider resource path |
@@ -207,7 +216,7 @@ Set `OPENAI_API_KEY` as an **environment secret** if using live AI. Do not place
 
 For private GHCR images, set the environment secret `GHCR_READ_TOKEN` (a long-lived, least-privileged package read token), plus `GHCR_USERNAME` as a variable; or configure `REGISTRY_PULL_SECRET` for a pre-existing namespace secret. Public images can instead use `GHCR_IMAGES_PUBLIC=true`. The workflow fails early if no access path is declared. A short-lived Actions `GITHUB_TOKEN` is used only for publishing, never stored as a persistent cluster pull secret.
 
-No workflow sends secrets or cloud credentials to pull-request code. The main-only dispatch guards also prevent selecting an arbitrary feature branch for privileged jobs. Pinning third-party Actions and container base images to reviewed digests is recommended before operating this as a production platform.
+No workflow sends secrets or cloud credentials to pull-request code. The main-only dispatch guards also prevent selecting an arbitrary feature branch for privileged jobs. External Actions are pinned to verified commit SHAs and base/PostgreSQL images to multi-architecture digests. The shared scanner is digest-pinned and isolated; source scans run for both clouds. Dependabot proposes weekly updates. Review the scoped, expiring node-HTTPS exception and the remaining account/PKI/operations responsibilities in the platform review.
 
 ## AI integration
 
@@ -222,7 +231,7 @@ The input is an environment plus a high-level goal, such as “cost-sensitive st
 - Memory request: `128Mi`, `256Mi`, or `512Mi`.
 - A short rationale.
 
-Unknown keys, wrong types, out-of-range values, and a one-replica production proposal are rejected locally even after API schema validation. Natural-language goals are passed as data, not interpolated into shell commands. These profiles are proposed application settings; they do not currently resize database or node infrastructure, and map into the common chart's replica count and resource requests. GCP values use portable minimums of 250m CPU/256Mi memory; any smaller AI proposal is raised to those minimums.
+Unknown keys, wrong types, out-of-range values, and a one-replica production proposal are rejected locally even after API schema validation. Natural-language goals are passed as data, not interpolated into shell commands. These profiles are proposed application settings; they do not currently resize database or node infrastructure, and map into the common chart's replica count and resource requests. GCP values use portable minimums of 250m CPU/256Mi memory and at least 1 GiB requested memory per vCPU (500m therefore needs 512Mi); smaller proposals are raised to the required floor.
 
 ```sh
 # Without credentials, this transparently reports source=policy-fallback.

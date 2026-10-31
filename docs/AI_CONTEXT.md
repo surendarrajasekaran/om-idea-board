@@ -1,6 +1,40 @@
 # AI continuation context
 
-Updated October 30, 2026. This is a project handoff for a new AI session or another laptop. It records implementation history and observed results; it is not a claim that cloud deployment has happened. Read the current source and Git status before continuing, because this snapshot can become stale.
+Historical baseline updated October 30, 2026. This is a project handoff for a new AI session or another laptop. It records implementation history and observed results; it is not a claim that cloud deployment has happened. Read the current source and Git status before continuing, because this snapshot can become stale.
+
+## Current continuation status - October 31, 2026
+
+The October 31 platform/security and GitOps changes supersede baseline commit `6349e55`. Read Git status and [verification](verification.md) for publication and deployment evidence. AWS test provisioning in account `812752207041` / `us-west-2` has created private RDS, ECR, an exact-environment GitHub publisher role and KMS-backed state storage. EKS/NAT provisioning is underway; no public endpoint or live AI success is claimed yet. Follow [the GitOps guide](gitops.md) for the current two-repository deployment model; use the older direct Helm flow below only for other targets.
+
+
+### AWS test GitOps continuation
+
+- Source repository: `surendarrajasekaran/om-idea-board`; deployment repository: `surendarrajasekaran/infra-helm-charts`.
+- Profile `mit-qa-administratoraccess`, region `us-west-2`, Terraform name `idea-board`, environment `test`. Preserve existing account resources such as the unrelated `louvre` cluster/databases.
+- Use Terraform 1.11.4 (the laptop's system Terraform may be older). Local target `.tfvars`, backend files, state/plan, kubeconfig and cloud artifacts are ignored. State and saved plans contain database credentials.
+- ECR repositories are immutable `idea-board-test/frontend` and `idea-board-test/backend`. The GitHub OIDC publisher role is scoped to those repositories and source-repo environment `aws-test`.
+- `gitops-release.yml` verifies/builds/scans then commits rendered chart output to the separate repo. A write deploy key exists as its environment secret `GITOPS_SSH_KEY`. Argo pulls public Git and EKS workers pull private ECR through their AWS role; app CI has no cluster administration.
+- `bootstrap_gitops.py` installs namespace controls/DB CA and credential Secrets plus the private Argo controller. `private_eks.py` provides run-scoped CA-verified SSM forwarding through the optional SSM-managed worker.
+- Health helpers are reviewed in source `scripts/` and copied into deployment `automation/`. Synchronize those copies when changing behavior. HTTP-only monitoring checks exact frontend/backend release identity, readiness and new-release write/read behavior, then records healthy history or commits guarded recovery. No Helm rollback under Argo auto-sync.
+- `AI_PROVIDER=nvidia` and its model variable are configured in both `aws-test` GitHub environments. An `AI_API_KEY` has not been supplied; policy fallback remains explicit. OpenAI and Groq adapters are available; real API responses remain unverified.
+
+
+- AWS and GCP adapters now compose separate provider-free network/Kubernetes/PostgreSQL modules, with moved blocks retaining original resource address history. CIDRs, AZs, node pools, database classes/tiers, storage/backup bounds and ownership labels are configurable.
+- `--name` isolates state prefixes, output targets, namespaces, releases, Services and Secrets. The `idea-board` default retains its state path. Invalid profiles/images/flags and missing local-build publishing identity fail before provisioning.
+- APIs default to private; provide runner/VPN routing and the real source CIDR. Restricted public opt-in is explicit. EKS defaults to 1.35 and STANDARD support (automatic control-plane upgrade after standard support, rather than extended-support enrollment). Staging uses one worker; production enforces >=2 on-demand workers.
+- Runtime `ideas_app` credentials are separate from migration credentials. SQL bootstrap grants SELECT/INSERT and sequence usage only and rejects privileged or grouped application roles. Tests cover a non-superuser migration owner with CREATEROLE/CREATEDB, matching managed-service constraints more closely than a local superuser alone.
+- RDS verifies hostname/CA (`verify-full`); Cloud SQL verifies its unique per-instance CA (`verify-ca`) for private-IP connections. A CA Secret is mounted into init and runtime containers. Database credential/CA fingerprints trigger backend rollout.
+- Namespace controls enforce Restricted Pod Security, quotas, default-deny networking and explicit frontend/API/DB/DNS paths. They are applied outside Helm so rollback cannot remove the security boundary. EKS enables VPC CNI policy enforcement. GKE has a dedicated minimal node service account. EKS node IMDSv2 uses hop limit 1 and encrypted gp3 root disks.
+- Both application containers have read-only roots. Nginx receives bounded writable config/cache/tmp volumes. Production requires `--tls-secret` and `--public-host`; the existing certificate Secret and owned DNS remain operator prerequisites. Renewed certificate fingerprints trigger frontend rollout on redeploy. Recovery derives the restored protocol/hostname from the Service.
+- Storage growth caps, DB availability/backup floors, query/connection/lock deadlines, sampled flow logs, AWS log retention and node capacity bounds are explicit. Cloud SQL disk growth drift is ignored to avoid shrink attempts; initial storage remains configurable before creation.
+- All external Actions and base/PostgreSQL image indices are pinned. The old mutable Trivy Action reference was removed after checking its upstream compromise advisory. `scripts/security_scan.py` uses an isolated digest-pinned 0.76.1 container for configuration, immutable registry image and local archive scans. It sees no Docker socket and uses disposable disk cache rather than fitting the expanded vulnerability DB into RAM.
+- CI and release verification include both-cloud HIGH/CRITICAL configuration gates and mock-provider Terraform tests. There is one scoped expiring node-HTTPS exception in `.trivyignore.yaml`, with a rationale and a January 31, 2027 review deadline. This is not a zero-risk/zero-all-severity claim.
+- Workflows share target mutation locks and use per-run Terraform directories. Checkout credentials do not persist. Local publishing requires `GHCR_PUBLISH_TOKEN`; only separate read-only `GHCR_TOKEN` can become a cluster pull Secret. Docker credentials are scoped to a temporary config; cloud/AI/registry credentials are limited to the required workflow steps.
+- Current verification includes 60 application/platform tests (13 real PostgreSQL backend/role cases, 44 script/chart/policy/CLI/recovery cases, 3 React cases), eight mock-provider Terraform cases, lint/build/format/Helm/Actionlint checks, dependency audits, both-cloud config scans and local arm64 image scans. Compose smoke/persistence and certificate-verified HTTPS under a non-root/read-only frontend passed. Consult verification for scope limits. Fresh GitHub CI for this unpushed work is still pending.
+
+Remaining: review a real plan, configure bootstrap trust/state/private routing and PKI/DNS, deploy to both clouds, verify enforcement and CA handling, exercise actual rollback/restores, record public URLs/digests/evidence. No live AI request or cloud apply was executed during this pass. Do not upload local credentials/state/plans/logs as handoff material.
+
+## Historical October 30 implementation snapshot
 
 ## User objective and agreed scope
 
@@ -135,4 +169,4 @@ Primary instructions/commands: [full-flow guide](full-flow.md). Architecture/boo
 
 The original case-study PDF is not committed. Credentials, `.env`, local `.tfvars`, Terraform state/plan/cache, virtual environments, node_modules, screenshots, and generated reports are excluded by `.gitignore`. Do not upload them as a substitute for this handoff. A localhost URL or generated configuration is not evidence of a successful public cloud deployment.
 
-The application is intentionally an anonymous, basic board. Authentication, moderation, pagination, production TLS/domain setup, full monitoring/alerting, future versioned schema migrations, advanced network policy, and autoscaling hardening are beyond the implemented case-study baseline and should not be described as already present.
+The application is intentionally an anonymous, basic board. Authentication, moderation, pagination, production TLS/domain setup, full monitoring/alerting, future versioned schema migrations, autoscaling, and comprehensive cluster telemetry/alerting are beyond the implemented case-study baseline and should not be described as already present.

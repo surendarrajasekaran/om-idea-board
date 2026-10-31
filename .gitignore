@@ -18,3 +18,5 @@ crash.log
 artifacts/
 .DS_Store
 gha-creds-*.json
+
+infra/bootstrap/backend.tf

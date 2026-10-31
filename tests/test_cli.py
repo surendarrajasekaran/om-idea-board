@@ -16,6 +16,11 @@ class CLITests(unittest.TestCase):
             "run_platform",
             "infra_init",
             "ai_ops",
+            "security_scan",
+            "gitops_release",
+            "gitops_monitor",
+            "bootstrap_gitops",
+            "private_eks",
         ):
             with self.subTest(script=name):
                 result = subprocess.run(
