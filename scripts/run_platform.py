@@ -331,7 +331,7 @@ if __name__ == "__main__":
                 if key not in {"auths", "credsStore", "credHelpers"}
             }
             (Path(docker_config) / "config.json").write_text(json.dumps(config))
-            for folder in ("buildx", "contexts"):
+            for folder in ("buildx", "contexts", "cli-plugins"):
                 if (original_config / folder).exists():
                     (Path(docker_config) / folder).symlink_to(
                         original_config / folder, target_is_directory=True
