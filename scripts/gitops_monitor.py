@@ -42,11 +42,13 @@ def wait_for_release(url, release_id, timeout=600):
     return False
 
 
-def monitor(root, target, output):
+def monitor(root, target, output, convergence_timeout=600):
     metadata = current(root, target)
     if not metadata or not metadata.get("public_url"):
         raise ValueError("A verified deployment URL must be configured first")
-    converged = wait_for_release(metadata["public_url"], metadata["id"])
+    converged = wait_for_release(
+        metadata["public_url"], metadata["id"], timeout=convergence_timeout
+    )
     measured = collect(metadata["public_url"], 20, 0)
     samples = {key: value for key, value in measured.items() if key != "restarts"}
     status = read_json(
@@ -70,6 +72,7 @@ def monitor(root, target, output):
     else:
         report = assess(samples, http_only=True)
     report["release_converged"] = converged
+    report["convergence_timeout_seconds"] = convergence_timeout
     if not converged:
         report["decision"] = "rollback"
         report.setdefault("policy_violations", []).append(
@@ -144,9 +147,14 @@ def main():
     parser.add_argument("--root", type=Path, default=Path.cwd())
     parser.add_argument("--target", required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--convergence-timeout", type=int, default=600)
     args = parser.parse_args()
+    if not 30 <= args.convergence_timeout <= 1800:
+        parser.error("Convergence timeout must be 30-1800 seconds")
     try:
-        parser.exit(monitor(args.root, args.target, args.output))
+        parser.exit(
+            monitor(args.root, args.target, args.output, args.convergence_timeout)
+        )
     except (ValueError, OSError, subprocess.CalledProcessError) as exc:
         parser.exit(
             1,

@@ -127,9 +127,12 @@ def main():
         OSError,
         subprocess.CalledProcessError,
     ) as exc:
-        parser.exit(
-            1, f"GitOps bootstrap failed ({type(exc).__name__}); no success claimed\n"
+        reason = (
+            str(exc)
+            if isinstance(exc, (RuntimeError, ValueError))
+            else type(exc).__name__
         )
+        parser.exit(1, f"GitOps bootstrap failed: {reason}; no success claimed\n")
 
 
 if __name__ == "__main__":

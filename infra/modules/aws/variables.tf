@@ -1,3 +1,8 @@
+variable "additional_ecr_services" {
+  type    = set(string)
+  default = []
+}
+
 variable "name" { type = string }
 variable "region" { type = string }
 variable "admin_cidrs" {

@@ -116,8 +116,10 @@ Terraform tests use mock providers and create no cloud resources. CI scans both 
 
 ## ECR and Argo CD test delivery
 
-AWS adapters expose `ecr_repository_urls` and optional `ecr_push_role_arn`. The ECR module creates frontend/backend repositories with immutable tags, scan-on-push, AES-256 encryption and seven-day untagged cleanup. Tagged images are retained for verified rollback. `force_delete=false` prevents implicit image loss; review retention and storage costs as release history grows.
+AWS adapters expose `repository_urls` and optional `ecr_push_role_arn`. The ECR module creates frontend/backend repositories with immutable tags, scan-on-push, AES-256 encryption and seven-day untagged cleanup. Tagged images are retained for verified rollback. `force_delete=false` prevents implicit image loss; review retention and storage costs as release history grows.
 
 Set `github_repository` and reuse `github_oidc_provider_arn` to enable the narrowly scoped publisher role. Trust requires the exact GitHub environment subject and STS audience; the role grants no EKS, database, Terraform or general account administration. The account bootstrap is separate to avoid a new app destroying shared federation/state trust roots.
 
 The selected test target uses optional `aws_enable_ssm_access=true` for private API administration through an SSM-managed worker. EKS public access CIDRs are omitted when the endpoint is private; private RFC1918 addresses must not be sent as public endpoint CIDRs. See [the GitOps guide](../docs/gitops.md) for the current target, KMS backend settings, bootstrap and ownership boundaries.
+
+AWS honors Systems Manager Quick Setup `QSConfigId-` ownership tags without trying to remove them on each plan. RDS PostgreSQL 16 defaults to mandatory SSL; the managed parameter remains explicitly `1` with the provider-reported pending-reboot application method, avoiding repeated apply-method-only drift. Verify runtime SSL and parameter apply status after any parameter-group change.

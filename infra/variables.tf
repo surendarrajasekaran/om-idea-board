@@ -1,3 +1,9 @@
+variable "aws_additional_ecr_services" {
+  type        = set(string)
+  default     = []
+  description = "Additional platform image repositories; application CI cannot publish to these."
+}
+
 variable "cloud" {
   type        = string
   description = "Cloud adapter: aws or gcp."

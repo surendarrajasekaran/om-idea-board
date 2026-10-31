@@ -1,8 +1,14 @@
 global:
   image:
-    tag: v3.5.6@sha256:8e5cc5bb008df8a09dba439462e58c94c55b7735888d3ebde0c25fc05e4e5335
+    repository: 812752207041.dkr.ecr.us-west-2.amazonaws.com/idea-board-test/argocd
+    tag: 3.5.6-dhi-20261029@sha256:a058cb3a70a6fb11cc9111f97414e66115e1163cc09b5980f57e225426eecab9
   domain: argocd.internal
+  networkPolicy:
+    create: true
+    defaultDenyIngress: true
 configs:
+  params:
+    controller.sync.timeout.seconds: "300"
   cm:
     application.resourceTrackingMethod: annotation
     exec.enabled: "false"
@@ -28,14 +34,10 @@ repoServer:
 redis:
   image:
     repository: docker.io/library/redis
-    tag: 8.6.4-alpine@sha256:2cc044fc5a07c9b701f8f1255a309ae9ad7856e694ac03513bf3648c01e40763
+    tag: 8.10.3-alpine@sha256:21090af93f8324db2f0f0f4f38a7c60369d47d917e000c3423d89d2ae2883537
   resources:
     requests: { cpu: 50m, memory: 64Mi }
     limits: { cpu: 500m, memory: 128Mi }
 dex: { enabled: false }
 notifications: { enabled: false }
-applicationSet:
-  replicas: 1
-  resources:
-    requests: { cpu: 50m, memory: 64Mi }
-    limits: { cpu: 500m, memory: 128Mi }
+applicationSet: { enabled: false }

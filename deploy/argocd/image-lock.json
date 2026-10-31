@@ -1,0 +1,9 @@
+{
+  "version": "3.5.6",
+  "upstream": "dhi.io/argocd:3.5@sha256:98bf38b4bfb24685868bc6f0faeddb527141b45d413c2f23f70293a31e1fdcc2",
+  "platform": "linux/amd64",
+  "platform_digest": "sha256:a058cb3a70a6fb11cc9111f97414e66115e1163cc09b5980f57e225426eecab9",
+  "catalog_commit": "ce80f0e2a0a754d6d51200318ecd4534790f99a0",
+  "catalog_source": "https://github.com/docker-hardened-images/catalog/blob/ce80f0e2a0a754d6d51200318ecd4534790f99a0/image/argocd/debian-13/3.5.yaml",
+  "mirror": "812752207041.dkr.ecr.us-west-2.amazonaws.com/idea-board-test/argocd:3.5.6-dhi-20261029@sha256:a058cb3a70a6fb11cc9111f97414e66115e1163cc09b5980f57e225426eecab9"
+}

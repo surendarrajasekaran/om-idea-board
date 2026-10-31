@@ -8,8 +8,9 @@ module "network" {
   log_retention_days = var.log_retention_days
 }
 module "ecr" {
-  source = "./ecr"
-  name   = var.name
+  source   = "./ecr"
+  name     = var.name
+  services = setunion(["frontend", "backend"], var.additional_ecr_services)
 }
 module "kubernetes" {
   source                  = "./kubernetes"
@@ -45,6 +46,6 @@ module "ci_registry_access" {
   name                       = var.name
   github_repository          = var.github_repository
   github_environment         = var.github_environment
-  repository_arns            = values(module.ecr.repository_arns)
+  repository_arns            = [for service in ["frontend", "backend"] : module.ecr.repository_arns[service]]
   existing_oidc_provider_arn = var.github_oidc_provider_arn
 }

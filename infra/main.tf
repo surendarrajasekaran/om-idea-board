@@ -7,6 +7,7 @@ provider "aws" {
   skip_requesting_account_id  = var.cloud != "aws"
   skip_metadata_api_check     = var.cloud != "aws"
   default_tags { tags = merge(var.labels, { project = var.name, environment = var.environment, managed_by = "terraform" }) }
+  ignore_tags { key_prefixes = ["QSConfigId-"] } # AWS Systems Manager Quick Setup owns these tags.
 }
 provider "google" {
   project      = var.cloud == "gcp" ? var.gcp_project : "unused-project"
@@ -35,6 +36,7 @@ module "aws" {
   database                 = var.database
   administrator_arns       = var.aws_administrator_arns
   enable_ssm_access        = var.aws_enable_ssm_access
+  additional_ecr_services  = var.aws_additional_ecr_services
   github_repository        = var.github_repository
   github_oidc_provider_arn = var.github_oidc_provider_arn
   github_environment       = "aws-${var.environment}"

@@ -88,3 +88,13 @@ After the frontend load balancer is reachable, configure `PUBLIC_URL` in the sou
 ## Review evidence
 
 Use `docs/verification.md` for observed results. A rendered chart, accepted Terraform plan or scheduled workflow definition alone is not evidence of a successful deployment, live AI response or successful rollback. The AWS deployment does not complete the assignment's separate GCP/public-URL requirement.
+
+## Controller image maintenance
+
+The upstream Argo CD 3.5.6 image scan found fixable HIGH/CRITICAL issues in bundled utilities and dependencies. This test installs Docker's maintained hardened 3.5.6 image instead, pinned in `deploy/argocd/image-lock.json` and mirrored without changing the Linux amd64 manifest digest into `idea-board-test/argocd`. The platform operator owns that mirror; the application publisher role remains limited to frontend/backend. No Docker registry credential is copied into Kubernetes. The selected Redis 8.10.3 image is independently digest-pinned and scanned.
+
+`aws_additional_ecr_services=["argocd"]` provisions the mirror repository. To refresh it, inspect the official Docker hardened-image catalog/version, authenticate with an existing authorized Docker registry identity, scan the exact upstream digest, copy that platform manifest into the private repository and verify that ECR reports the identical digest. Review the chart's binary paths/user compatibility, update the image lock and values together, and perform a private Helm controller upgrade followed by GitOps/application health checks. Do not grant application CI the platform mirror's publishing permissions.
+
+The hardened-image scan covers its recognized distribution packages; Trivy reported no embedded Go module metadata for that image. Its clean package result is not proof of zero application vulnerabilities. Keep the pinned Docker build/package provenance and refresh from maintained sources. Argo CD itself remains a privileged cluster controller and a trust root: its AppProject limits Git-managed resources, while its controller's Kubernetes permissions follow the upstream chart. Restrict operator access and review a namespace-scoped controller installation before sharing this cluster with unrelated tenants.
+
+When rotating database/CA or TLS Secrets, bootstrap the new values through the authenticated private connection and publish a new GitOps release to restart pods and reload them. Git does not hold Secret bytes, so editing a Secret alone does not automatically change an application's pod template. Validate connections/certificates after rotation.
