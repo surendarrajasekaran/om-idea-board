@@ -2,6 +2,24 @@
 
 Earlier baseline verified locally on October 29, 2026. CI workflows define repeatable checks; remote run results are available in the repository's GitHub Actions. AWS test apply progress is recorded separately below; earlier local results do not imply a completed cloud deployment.
 
+## November 1 Gemini live verification
+
+The selected provider is `gemini`, model `gemini-3.5-flash-lite`. Both repositories set repository variable `AI_ENVIRONMENT=GEMINI_API_KEY` to select the dedicated environment containing the rotated `GEMINI_API_KEY` secret. Its environment variables select the provider/model. AWS build/publish jobs continue to use `aws-test`. No key values are stored in source, reports or Terraform.
+
+- [Standalone required-live provider check](https://github.com/surendarrajasekaran/om-idea-board/actions/runs/41282655825) passed and produced `source=live-ai`. The original `gemini-flash-latest` checks returned HTTP 503 and timed out; the user approved switching to the pinned Flash-Lite model.
+- [Source CI](https://github.com/surendarrajasekaran/om-idea-board/actions/runs/41282734678) passed for `aef4b5e`: 67 application/platform cases (13 PostgreSQL backend, 51 script/chart/policy/provider/recovery, 3 React), 11 Terraform mock-provider cases, Compose/persistence, lint/build/audits and configuration scans. The seven new Gemini cases include multiple invalid-response/model subcases, safe HTTP diagnostics, no key forwarding on redirects, bounded output and quota fallback.
+- [Required-live ECR/GitOps release](https://github.com/surendarrajasekaran/om-idea-board/actions/runs/41282749169) passed with `require_ai=true`. Gemini proposed one replica, 250m CPU and 128Mi requested memory per component. Both Linux amd64 images passed the fixable HIGH/CRITICAL scan gate. GitOps release commit: `e4f9e9d`.
+- [Independent deployed-release health](https://github.com/surendarrajasekaran/infra-helm-charts/actions/runs/41282887901) passed with `source=live-ai`, `decision=keep`, no policy violations, exact frontend/backend version convergence and a successful create/read smoke test. HTTP evidence: 20 requests, zero failures, p95 **110.77 ms**. Coverage is HTTP only; this is a small smoke window rather than a load benchmark. Health commit `36fbb8c` records the release as healthy with no pending recovery.
+
+Current healthy release: `aef4b5e18879954f2041dc0886eca756515657fb-41282749169-1`.
+
+| Image | Verified deployment digest |
+| --- | --- |
+| Frontend | `sha256:1ad2523feb923143bcb921103d977cff5bc23d22e7f852b826a1b472d5745291` |
+| Backend | `sha256:7119ba1be9607409d9473124c70e9a416d136f762b08c193109d989049d34a56` |
+
+The earlier rollback drill below exercised Git recovery with deterministic policy. This Gemini verification exercised a healthy live assessment; it does not claim a new AI-triggered rollback drill. Healthy steady-state observations avoid further model calls. A Free Tier project is required for free quota; billing-enabled project usage may be charged under Google's pricing.
+
 ## October 31 AWS GitOps implementation and provisioning
 
 | Check / component | Observed status |
@@ -16,7 +34,7 @@ Earlier baseline verified locally on October 29, 2026. CI workflows define repea
 | Database | Private encrypted RDS available; live API uses ideas_app over TLS 1.3, without superuser/CREATEROLE/CREATEDB |
 | NAT / EKS / workers | Created; EKS 1.35.9 Ready with private API, private worker and no control-plane health issues |
 | Argo CD / public application | Installed; application Synced/Healthy; public frontend/backend identity and create/read smoke passed |
-| AI | Gemini selected; 51 script/chart/policy tests pass, including 7 Gemini request/response/security cases with additional subcases. Hosted live Gemini verification pending |
+| AI | Gemini Flash-Lite live planning and deployed HTTP health assessment passed; 51 script/chart/policy tests pass, including 7 Gemini cases and additional subcases. See November 1 evidence below |
 
 Public AWS test URL: [Idea Board](http://af0d4388f01a74cebb0d087102ac80e7-5adda6a4d01432b5.elb.us-west-2.amazonaws.com). The baseline health report measured 20 requests, zero failures and p95 561.68 ms from the operator laptop; this is a small remote smoke observation, not a load benchmark. The assessment was explicitly `policy-fallback`, and the real create/read smoke created verification idea 1. Healthy status was committed to the deployment repository.
 
