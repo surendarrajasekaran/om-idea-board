@@ -1,13 +1,13 @@
 # Supplied nucleus chart integration
 
-`deploy/charts/nucleus` is an unchanged copy of the user-supplied nucleus 1.1.0 chart. `deploy/charts/nucleus-source.json` records SHA-256 checksums for its Chart.yaml, defaults, README, and templates. Contract tests verify every copied file. There are no replacement application Deployment templates.
+`deploy/charts/nucleus` is an unchanged copy of the user-supplied nucleus 1.1.0 chart. `deploy/charts/nucleus-source.json` records SHA-256 checksums for its Chart.yaml, defaults, README, and templates. Contract tests verify every copied file. This is the single canonical chart copy. The GitOps publisher renders it and the source component values at the release source commit, then publishes only generated manifests and recovery metadata. Optional upstream templates remain intact to preserve the reusable chart contract and recorded hashes. There are no replacement application Deployment templates.
 
 | Component | Custom values | Release/Service name | Port | Exposure |
 | --- | --- | --- | --- | --- |
 | Frontend | `deploy/frontend/custom-values.yaml` | `idea-board-frontend` | 8080 / Service 80 | LoadBalancer |
 | Backend | `deploy/backend/custom-values.yaml` | `idea-board-backend` | 8000 | ClusterIP |
 
-The namespace defaults to `idea-board-staging` or `idea-board-production`. The frontend's `BACKEND_HOST` matches the fixed backend Service name. The same release names work on different clusters; environments use different namespaces.
+The namespace is `<name>-<environment>`, including `idea-board-test` for the current AWS target. The frontend's `BACKEND_HOST` matches the fixed backend Service name. The same release names work on different clusters; environments use different namespaces.
 
 ## Values mapping
 
@@ -20,7 +20,7 @@ The namespace defaults to `idea-board-staging` or `idea-board-production`. The f
 - Readiness `/health/ready`, liveness `/health/live`, and startup probes → native chart probe fields.
 - Production defaults are at least two replicas; the chart emits the enabled PodDisruptionBudget only with multiple replicas.
 
-The backend root filesystem is read-only; frontend root filesystem stays writable because the Nginx entrypoint renders its proxy configuration. Both drop Linux capabilities and disable privilege escalation and service-account token automounting.
+Both root filesystems are read-only. Bounded writable volumes hold Nginx's rendered configuration, cache and temporary files. Both drop Linux capabilities and disable privilege escalation and service-account token automounting.
 
 ## Cloud public endpoint
 
@@ -30,7 +30,7 @@ AWS documentation: https://docs.aws.amazon.com/eks/latest/userguide/network-load
 
 ## Rollout and failure recovery
 
-`scripts/run_platform.py` initializes matching remote state, optionally applies infrastructure, builds/publishes/scans images, obtains a run-scoped kubeconfig, then invokes `scripts/deploy.py`.
+For the Argo-managed AWS test application, use [GitOps delivery](gitops.md). For separate targets outside Argo ownership, `scripts/run_platform.py` initializes matching remote state, optionally applies infrastructure, builds/publishes/scans images, obtains a run-scoped kubeconfig, then invokes `scripts/deploy.py`.
 
 The deployer validates the profile and image references, checks Terraform name/cloud/environment outputs, applies namespace admission, quotas and network policies, and records deployed revisions. It refuses an existing failed/pending Helm release rather than assuming a fresh installation. It updates separate runtime/migration database Secrets, a read-only database CA Secret and optional registry credentials through stdin, then upgrades backend and frontend with Helm's failure rollback and bounded waits. Helm 3 (`--atomic`) and Helm 4 (`--rollback-on-failure`) are supported.
 

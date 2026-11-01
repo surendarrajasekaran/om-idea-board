@@ -1,188 +1,44 @@
 # AI continuation context
 
-Historical baseline updated October 30, 2026. This is a project handoff for a new AI session or another laptop. It records implementation history and observed results; it is not a claim that cloud deployment has happened. Read the current source and Git status before continuing, because this snapshot can become stale.
+Updated November 1, 2026. This file records current project state; historical test/deployment evidence lives in [verification](verification.md).
 
-## November 1 Gemini verification (current)
+## Repositories and ownership
 
-The user chose **Gemini only**, with the pinned `gemini-3.5-flash-lite` model. Both repositories use `AI_ENVIRONMENT=GEMINI_API_KEY` (repository variable) to select the dedicated environment holding the replacement secret; provider/model variables are set there. AWS publisher jobs remain scoped to `aws-test`. The model endpoint is fixed Google HTTPS, credentials use an unredirected header, native JSON-schema output is validated locally, requests have a 30-second timeout and a 1,200-token output cap. Do not configure arbitrary proxies or infer billing tier from a key/model name.
+- Source: `surendarrajasekaran/om-idea-board`; GitOps desired state: `surendarrajasekaran/infra-helm-charts`.
+- Source `deploy/charts/nucleus` is the single canonical, unchanged user-supplied nucleus 1.1.0 chart. `deploy/charts/nucleus-source.json` records its hashes; component values are in `deploy/frontend` and `deploy/backend`.
+- `gitops_release.py` renders that source commit's chart/values. GitOps holds generated `environments/<target>/manifests`, immutable `releases/<target>/<id>` snapshots, bootstrap definitions and reviewed monitor helpers. It needs no chart/value copies.
+- Argo CD owns the AWS test application's rollout and Git-based recovery. The old GHCR/direct-Helm Actions workflow is retired. Manual `run_platform.py`/`deploy.py` remain for separate, non-Argo targets and shared rendering/bootstrap utilities.
+- Both cloud Terraform implementations remain part of the assignment. AWS is deployed; GCP deployment and its second public URL are still outstanding.
 
-Live provider check `41282655825` succeeded. Source CI `41282734678` passed (67 application/platform cases plus 11 Terraform cases). Required-live ECR/GitOps release `41282749169` passed for source `aef4b5e`, proposing one replica, 250m CPU and 128Mi requested memory per component. GitOps commit `e4f9e9d` published release `aef4b5e18879954f2041dc0886eca756515657fb-41282749169-1`. Independent health workflow `41282887901` returned `source=live-ai`, `decision=keep`, matched both component release identities, passed create/read and observed 20 requests, zero failures and p95 110.77 ms. Health commit `36fbb8c` records it as healthy with no pending recovery. Earlier sections describe historical fallback runs; this is the current result. See [verification](verification.md) for links and digests. The previous rollback drill used policy fallback, not an AI-triggered rollback.
+## Verified AWS baseline
 
-The manual **Check live AI provider** workflow tests a replacement key/model with one required-live proposal before building images. Missing keys, provider failures and invalid proposals remain explicitly labeled fallback in optional mode; `--require-ai` fails instead. Scheduled checks skip model calls for an unchanged healthy release. No self-hosted provider was integrated.
+Account `812752207041`, profile `mit-qa-administratoraccess`, region `us-west-2`, name `idea-board`, environment `test`, namespace/cluster `idea-board-test`. Preserve unrelated account resources, including `louvre` and `signal-demo` workloads.
 
-## Current continuation status - October 31, 2026
+Private EKS API and worker, one `t3.medium`, one managed NAT, private encrypted RDS PostgreSQL 16, immutable ECR frontend/backend repositories and a mirrored hardened Argo image are provisioned. Argo's UI is private and its unused ApplicationSet controller is scaled to zero. The anonymous public board uses HTTP: [AWS test board](http://af0d4388f01a74cebb0d087102ac80e7-5adda6a4d01432b5.elb.us-west-2.amazonaws.com).
 
-The October 31 platform/security and GitOps changes supersede baseline commit `6349e55`. Read Git status and [verification](verification.md) for publication and deployment evidence. AWS test provisioning in account `812752207041` / `us-west-2` has created private RDS, ECR, an exact-environment GitHub publisher role and KMS-backed state storage. EKS/NAT/worker and Argo CD are created. Public frontend/backend identity and create/read checks passed; a healthy baseline is committed to the deployment repository. The backend uses a nonprivileged ideas_app role with TLS 1.3, and live pod egress restrictions were verified. No live AI success is claimed. Both repositories and workflows are published through the personal GitHub account after workflow authorization. Follow [the GitOps guide](gitops.md) for the current two-repository deployment model; use the older direct Helm flow below only for other targets.
+The Gemini baseline source release `41282749169` and independent health run `41282887901` passed with `source=live-ai`: matching component identities, create/read success, 20 requests, zero failures and p95 110.77 ms. The current release and healthy history are authoritative in GitOps `release.json`/`status.json`; later source releases can supersede that baseline. The prior Git recovery drill used deterministic policy and preserved data; it was not an AI-triggered rollback drill.
 
+## AI and delivery configuration
 
-### November 1 observed recovery
+The user selected Gemini only, model `gemini-3.5-flash-lite`. Each repository has repository variable `AI_ENVIRONMENT=GEMINI_API_KEY` selecting the dedicated environment where the rotated secret `GEMINI_API_KEY` was saved. That environment has `AI_PROVIDER=gemini`, `AI_MODEL=gemini-3.5-flash-lite`. AWS publisher jobs use `aws-test` independently. No self-hosted provider was integrated.
 
-The failed test release `rollback-drill-20261031` was recovered through Git commit `bd79b81` and Argo reconciliation. The healthy recovery is `recovery-1793509010408156000`; commit `26d6c69` records verified health and clears pending recovery. Public release identities and create/read passed, and the baseline verification idea persisted. The test used a 60-second convergence override and deterministic fallback, not a live model. GitHub workflow authorization and AWS SSO renewal subsequently completed. Both repositories/workflows are published, and the ApplicationSet controller zero-replica optimization was applied.
+`gitops-release.yml` verifies, proposes a bounded profile, builds/scans immutable Linux amd64 ECR images and publishes desired state using environment secret `GITOPS_SSH_KEY`. The CI role is ECR-push only, without EKS/state administration. Its trust uses exact immutable subject `repo:surendarrajasekaran@35868093/om-idea-board@1438722777:environment:aws-test` and STS audience; GitHub's repository settings confirmed immutable subjects. The Terraform module also supports validated legacy repository prefixes.
 
-### November 1 automated pipeline accepted
+Gemini uses a fixed HTTPS endpoint, an unredirected key header, native JSON-schema output, local validation, a 30-second timeout and a 1,200-token output cap. Test policy permits one replica and at most 250m requested CPU per component; production requires at least two replicas. Provider/schema failures explicitly fall back to policy, or fail when live AI is required. The manual AI check tests a replacement key/model with one proposal. A free-tier billing project is required for free quota; a key/model name does not establish billing tier.
 
-Both repositories are published. Code CI `41276404191` passed (including 11 Terraform cases), ECR/GitOps release `41275785592` attempt 2 passed, and the independently triggered new-release health workflow `41276535583` passed. Current healthy release: `f2f202a189c020d222b335c25db52eb2c82f5008-41275785592-2`, GitOps release commit `0015f83`, health commit `6408d3e`. Argo is Synced/Healthy, frontend/backend public identities match, and hosted create/read succeeded. The unused ApplicationSet controller is scaled to zero. Health remains explicitly policy-fallback; no live provider key has been configured. Terraform uses the repository's exact immutable OIDC prefix from GitHub settings, with exact aws-test environment and STS audience matching. See verification for links, digests, initial failures and subsequent fixes.
+The GitOps monitor verifies both component versions, 20 readiness requests and a new-release create/read operation. It has HTTP-only evidence; it does not observe CPU, memory, pod restarts or logs. Hard gates force recovery when failed even if AI recommends keeping a release. Recovery commits previous verified images/resources, retains current security/Secret/CA references, validates snapshot hashes, rejects stale pushes and guards pending recovery. No database/data/infrastructure rollback occurs. Healthy unchanged releases skip AI calls.
 
-### AWS test GitOps continuation
+## State, credentials and tools
 
-- Source repository: `surendarrajasekaran/om-idea-board`; deployment repository: `surendarrajasekaran/infra-helm-charts`.
-- Profile `mit-qa-administratoraccess`, region `us-west-2`, Terraform name `idea-board`, environment `test`. Preserve existing account resources such as the unrelated `louvre` cluster/databases.
-- Use Terraform 1.11.4 (the laptop's system Terraform may be older). Local target `.tfvars`, backend files, state/plan, kubeconfig and cloud artifacts are ignored. State and saved plans contain database credentials.
-- ECR repositories are immutable `idea-board-test/frontend` and `idea-board-test/backend`. The GitHub OIDC publisher role is scoped to those repositories and source-repo environment `aws-test`.
-- `gitops-release.yml` verifies/builds/scans then commits rendered chart output to the separate repo. A write deploy key exists as its environment secret `GITOPS_SSH_KEY`. Argo pulls public Git and EKS workers pull private ECR through their AWS role; app CI has no cluster administration.
-- `bootstrap_gitops.py` installs namespace controls/DB CA and credential Secrets plus the private Argo controller. `private_eks.py` provides run-scoped CA-verified SSM forwarding through the optional SSM-managed worker.
-- Health helpers are reviewed in source `scripts/` and copied into deployment `automation/`. Synchronize those copies when changing behavior. HTTP-only monitoring checks exact frontend/backend release identity, readiness and new-release write/read behavior, then records healthy history or commits guarded recovery. No Helm rollback under Argo auto-sync.
-- The selected provider is now `AI_PROVIDER=gemini`, `AI_MODEL=gemini-3.5-flash-lite`. Both repositories use repository variable `AI_ENVIRONMENT=GEMINI_API_KEY` because the user saved the rotated key in that dedicated environment. Only GitOps AI jobs select it; ECR/publish jobs still use `aws-test`. Workflows read `GEMINI_API_KEY` (provider-specific key preferred) or the legacy `AI_API_KEY`. Native generateContent JSON-schema output is locally validated; blocked/truncated/oversized responses and invalid model identifiers fail safely. OpenAI, NVIDIA and Groq remain available. Live Gemini planning and deployed HTTP health have now passed; see the current November 1 evidence above and verification links.
+- Terraform 1.11.4 is available at `/tmp/om-platform-tools/terraform`; the system binary may be older. AWS target configuration, backend files, plans/state, kubeconfig and artifacts are ignored and can contain credentials. Preserve operational state during repository cleanup.
+- State bucket: `idea-board-tfstate-812752207041-us-west-2`, KMS alias `idea-board-terraform-state`; bootstrap/application state use separate prefixes and native S3 locking.
+- Private administration uses `scripts/private_eks.py` with a run-scoped kubeconfig, SSM and verified cluster CA/hostname. Avoid printing session-manager process arguments because they can contain session credentials.
+- Bootstrap creates namespace controls and database credential/CA Secrets over the private API; neither Secrets nor database URLs enter Git or model requests. Runtime `ideas_app` is nonprivileged; migration credentials are separate and TLS is verified.
+- Personal GitHub user is `surendarrajasekaran`. Repo-local credential helpers select that user's token; the globally active work account is intentionally preserved. Personal `gh` calls obtain that user's token in process environment without printing it.
+- Monitor helpers are reviewed in source `scripts/` and synchronized into GitOps `automation/` when behavior changes. The separate copies let the health workflow run from its own repository.
 
+## Checks and remaining scope
 
-- AWS and GCP adapters now compose separate provider-free network/Kubernetes/PostgreSQL modules, with moved blocks retaining original resource address history. CIDRs, AZs, node pools, database classes/tiers, storage/backup bounds and ownership labels are configurable.
-- `--name` isolates state prefixes, output targets, namespaces, releases, Services and Secrets. The `idea-board` default retains its state path. Invalid profiles/images/flags and missing local-build publishing identity fail before provisioning.
-- APIs default to private; provide runner/VPN routing and the real source CIDR. Restricted public opt-in is explicit. EKS defaults to 1.35 and STANDARD support (automatic control-plane upgrade after standard support, rather than extended-support enrollment). Staging uses one worker; production enforces >=2 on-demand workers.
-- Runtime `ideas_app` credentials are separate from migration credentials. SQL bootstrap grants SELECT/INSERT and sequence usage only and rejects privileged or grouped application roles. Tests cover a non-superuser migration owner with CREATEROLE/CREATEDB, matching managed-service constraints more closely than a local superuser alone.
-- RDS verifies hostname/CA (`verify-full`); Cloud SQL verifies its unique per-instance CA (`verify-ca`) for private-IP connections. A CA Secret is mounted into init and runtime containers. Database credential/CA fingerprints trigger backend rollout.
-- Namespace controls enforce Restricted Pod Security, quotas, default-deny networking and explicit frontend/API/DB/DNS paths. They are applied outside Helm so rollback cannot remove the security boundary. EKS enables VPC CNI policy enforcement. GKE has a dedicated minimal node service account. EKS node IMDSv2 uses hop limit 1 and encrypted gp3 root disks.
-- Both application containers have read-only roots. Nginx receives bounded writable config/cache/tmp volumes. Production requires `--tls-secret` and `--public-host`; the existing certificate Secret and owned DNS remain operator prerequisites. Renewed certificate fingerprints trigger frontend rollout on redeploy. Recovery derives the restored protocol/hostname from the Service.
-- Storage growth caps, DB availability/backup floors, query/connection/lock deadlines, sampled flow logs, AWS log retention and node capacity bounds are explicit. Cloud SQL disk growth drift is ignored to avoid shrink attempts; initial storage remains configurable before creation.
-- All external Actions and base/PostgreSQL image indices are pinned. The old mutable Trivy Action reference was removed after checking its upstream compromise advisory. `scripts/security_scan.py` uses an isolated digest-pinned 0.76.1 container for configuration, immutable registry image and local archive scans. It sees no Docker socket and uses disposable disk cache rather than fitting the expanded vulnerability DB into RAM.
-- CI and release verification include both-cloud HIGH/CRITICAL configuration gates and mock-provider Terraform tests. There is one scoped expiring node-HTTPS exception in `.trivyignore.yaml`, with a rationale and a January 31, 2027 review deadline. This is not a zero-risk/zero-all-severity claim.
-- Workflows share target mutation locks and use per-run Terraform directories. Checkout credentials do not persist. Local publishing requires `GHCR_PUBLISH_TOKEN`; only separate read-only `GHCR_TOKEN` can become a cluster pull Secret. Docker credentials are scoped to a temporary config; cloud/AI/registry credentials are limited to the required workflow steps.
-- Current verification includes 60 application/platform tests (13 real PostgreSQL backend/role cases, 44 script/chart/policy/CLI/recovery cases, 3 React cases), 11 mock-provider Terraform cases, lint/build/format/Helm/Actionlint checks, dependency audits, both-cloud config scans and local arm64 image scans. Compose smoke/persistence and certificate-verified HTTPS under a non-root/read-only frontend passed. Consult verification for scope limits. Fresh GitHub CI for this unpushed work is still pending.
+Python/chart/policy/recovery tests, PostgreSQL tests, frontend tests/build, Terraform mock-provider tests, Compose persistence, dependency audits, configuration/image scans and pinned workflow lint are exercised in CI. The supplied chart's optional templates remain intact to preserve its reusable 1.1.0 contract and provenance. See verification for exact runs and counts.
 
-Remaining: review a real plan, configure bootstrap trust/state/private routing and PKI/DNS, deploy to both clouds, verify enforcement and CA handling, exercise actual rollback/restores, record public URLs/digests/evidence. No live AI request or cloud apply was executed during this pass. Do not upload local credentials/state/plans/logs as handoff material.
-
-## Historical October 30 implementation snapshot
-
-## User objective and agreed scope
-
-Implement the supplied **Dev Ops Case Study** clearly and completely: an Idea Board application, containers, modular infrastructure for two clouds, AI-assisted CI/CD, public deployments on both clouds, and documentation/evidence.
-
-The user asked for autonomous implementation and a push to `https://github.com/surendarrajasekaran/om-idea-board`, then plans to pull on another laptop with AWS/GCP configured. The development laptop handled implementation and available verification. Actual cloud execution is the next phase on the configured laptop.
-
-The user initially asked to defer Kubernetes deployment files because they had a common chart. They subsequently provided the nucleus chart, authorized reusing it with separate frontend/backend `custom-values.yaml` files, and requested the full flow. That chart integration is now implemented; it is not still waiting for a chart.
-
-## Git checkpoints
-
-- Branch: `main`; remote: `origin`, the GitHub repository above.
-- `775f8ae`: initial application/platform implementation, including nucleus integration.
-- `e97221b`: fixed Linux/Python 3.12 CLI module shadowing and added regression coverage.
-- Both implementation commits were pushed. Local and remote `main` matched `e97221bae81f09c47a27cee416b106fec6b9ff9c` before adding this handoff document.
-- Successful verification run for `e97221b`: [GitHub Actions run 40935839136](https://github.com/surendarrajasekaran/om-idea-board/actions/runs/40935839136). All four jobs passed: backend, frontend, infrastructure, Compose.
-- The earlier run for `775f8ae` failed only at the Compose smoke CLI import; this was fixed rather than ignored.
-- This context document is a later documentation commit. Inspect `git log` for its exact revision and any subsequent changes.
-
-## What exists
-
-### Application
-
-- React frontend in `frontend/`: responsive board, submit form, search, loading/error/empty states, refresh, and accessible controls.
-- FastAPI backend in `backend/app/`: `GET /api/ideas`, `POST /api/ideas`, trimmed 1–1000-character validation, database error handling, liveness/readiness endpoints, and Prometheus metrics.
-- SQLAlchemy model: PostgreSQL `ideas(id, content, created_at)`; newest-first results.
-- Initial additive migration: `python -m app.migrate`, serialized with a PostgreSQL advisory transaction lock. This is initial-schema creation, not a full versioned migration framework.
-- Nginx serves the frontend on 8080 and proxies same-origin API requests to the backend on 8000. Database/backend ports are internal in Compose; frontend binds localhost:8080.
-- Docker Compose starts PostgreSQL 16, migration, backend, then frontend; named volume persists ideas.
-
-### Containers and dependency decisions
-
-- Multi-stage frontend/backend Dockerfiles; non-root runtime users (frontend 101, backend 10001).
-- Frontend runtime: `nginxinc/nginx-unprivileged:stable-alpine` with runtime package upgrades. The earlier 1.28 Alpine base had fixable vulnerabilities.
-- Backend runtime: Python 3.12 slim, updated distribution packages, system `libpq5`, and pure psycopg wrapper. Production deliberately excludes `psycopg-binary`: that wheel bundled old native libraries caught by the image scan.
-- `psycopg-binary` remains a **development-only** convenience for native tests; it is not copied into production images.
-- Runtime Python packages are pinned in `backend/requirements.txt`; dev requirements include script tooling. Script requirements are in `scripts/requirements.txt` (PyYAML).
-- Frontend package lock is tracked; Vite/Vitest were updated to patched versions. Prettier formats application source/workflows; the copied chart stays unchanged.
-
-### Infrastructure
-
-- Shared Terraform root in `infra/`, with `cloud`, `region`, `environment`, `admin_cidrs`, optional GCP project, and deletion-protection inputs.
-- AWS adapter: two-AZ VPC, NAT/private nodes, EKS managed node group, private RDS PostgreSQL 16, database security group, backups and encryption. Production enables database Multi-AZ and longer backup retention.
-- GCP adapter: VPC/subnet/pod-service ranges, Cloud NAT, GKE Autopilot with private nodes, private Cloud SQL PostgreSQL 16, encrypted database connections, backups/PITR; production uses regional database availability.
-- Kubernetes API public access is restricted to supplied administrator/runner CIDRs. Example `203.0.113.10/32` is documentation-only and must be replaced.
-- Outputs include `cluster_name`, sensitive `database_url`, `cloud`, `region`, `environment`, and `gcp_project`.
-- `scripts/infra_init.py` selects S3 or GCS remote state by writing ignored `infra/backend.tf`. State buckets/trust identities are bootstrap prerequisites, not created by this stack.
-- Provider/module versions and provider lock file are tracked. Terraform was initialized and validated; no real cloud plan/apply was performed.
-- Run clouds sequentially in one checkout or use separate clones. The initializer uses `-reconfigure`, not cross-cloud state migration.
-
-### Common chart
-
-- Original chart was supplied from a sibling `nucleus/nucleus` directory; that external directory was not edited.
-- A portable, unchanged copy of nucleus **1.1.0** is tracked under `deploy/charts/nucleus`.
-- `deploy/charts/nucleus-source.json` records per-file SHA-256 hashes, checked by tests.
-- User-specific values:
-  - `deploy/frontend/custom-values.yaml`
-  - `deploy/backend/custom-values.yaml`
-- Cloud frontend Service overlays: `deploy/clouds/aws.yaml`, `deploy/clouds/gcp.yaml`.
-- Two releases/Services: `idea-board-backend` and `idea-board-frontend`, in namespace `idea-board-staging` or `idea-board-production`.
-- Backend is ClusterIP; frontend is LoadBalancer. AWS overlay requests an NLB supported by EKS's legacy service controller; GKE uses an external L4 load balancer. No additional ingress controller is bootstrapped.
-- This baseline uses HTTP and allocated cloud hostname/IP. DNS/TLS and production identity/edge controls were not configured.
-- Backend uses an existing database Secret through `envFrom`; migration runs in the chart-supported init container using the exact backend image.
-- Probes, non-root security contexts, disabled service-account token mounts, resource requests/limits, and disruption budgets for multiple replicas are set through chart values.
-- The chart builds image strings as `repository:tag`; digest-pinned images therefore use `repository:commit@sha256:digest` (or `pinned@sha256:digest` for digest-only input). Do not replace this with an incompatible invented chart key.
-
-### AI behavior
-
-- `scripts/ai_ops.py` uses the OpenAI Responses API with strict structured output and additional local validation. No model-generated command or arbitrary IaC is executed.
-- Resource profile: replicas 1/2/3, CPU 100m/250m/500m, memory 128Mi/256Mi/512Mi, short rationale. Production requires at least two replicas.
-- Profiles map to known nucleus replica/resource keys. GCP raises proposals below the configured 250m CPU/256Mi floor; limits are 1 CPU/512Mi.
-- Health input is aggregate numeric probe evidence only: requests, failures, p95 latency, restart delta. No raw logs, idea content, database URI, or credentials go to the model.
-- Deterministic failure gates: error rate >5%, p95 >1500ms, or new container restarts. AI cannot override failed gates, but may recommend rollback for additional concerns.
-- `OPENAI_API_KEY` and `OPENAI_MODEL` are explicit environment settings. Without live credentials or with rejected/unavailable responses, output is visibly labeled `policy-fallback`; `--require-ai` fails instead.
-- No live OpenAI request was made during verification. API calls are mocked in tests; local health runs used policy fallback.
-
-### Full deployment flow
-
-The current entry point is **`scripts/run_platform.py`**, never `scripts/platform.py`. The old name shadowed Python's standard-library `platform`, breaking `uuid` imports on Linux/Python 3.12. A subprocess regression test now invokes `--help` on all six CLIs.
-
-`run_platform.py` performs:
-
-1. Prerequisite checks and profile creation/reuse.
-2. Matching remote-state initialization.
-3. Terraform plan to a saved file and apply; local plan file is removed afterward.
-4. Linux amd64 image build/push with Git commit tags, SBOM/provenance, digest capture, and fixable HIGH/CRITICAL vulnerability gate via Trivy.
-5. A temporary run-scoped kubeconfig for the selected EKS/GKE cluster, preserving the user's default context.
-6. Invocation of `scripts/deploy.py` with explicit context, images, target, and profile.
-
-`deploy.py` validates target/profile/images, reads sensitive Terraform outputs without printing them, creates the namespace, records deployed Helm revisions, updates database/optional registry Secrets through stdin, and upgrades backend then frontend. It supports Helm 3 `--atomic` and Helm 4 `--rollback-on-failure`.
-
-It waits for public endpoint readiness, measures probes/restart deltas, assesses health, and runs a real create/read smoke test. A failure restores attempted releases in reverse order to recorded known-good revisions; a failed first installation is removed. Recovery is checked and recorded; overall failure remains a nonzero exit. Database data/schema and infrastructure are never automatically destroyed on application failure.
-
-Sanitized `deployment.json`, `health.json`, and profile files go under ignored `artifacts/<cloud>-<environment>/`. Secrets are not stored in chart values/artifacts. `--skip-infra`, `--skip-build`, `--profile`, and explicit image references support reusing verified release artifacts. Skipping builds also skips their scan and assumes images were already scanned.
-
-### Workflows
-
-- `ci.yml` (**Verify**): PR/main push checks; backend/PostgreSQL tests, AI/chart/CLI tests, frontend tests/build/audit, Terraform validation, full Compose smoke and persistence checks.
-- `infrastructure.yml` (**Infrastructure**): main-only manual plan/apply, OIDC credentials, remote state; trusted self-hosted Linux runner labeled `idea-board` with fixed egress.
-- `release.yml` (**Release and deploy**): main-only manual release, reusable tests, validated AI profile, commit-tagged images/digests, GHCR publishing, provenance/SBOM, scans, then optional deployment (default true) to existing infrastructure using exact artifacts.
-- `reusable-tests.yml`: release verification.
-- `actionlint.yaml` declares the custom runner label. Actionlint passed locally.
-- Source pushes do not automatically provision/deploy clouds. No privileged workflow was dispatched during implementation.
-
-## Observed verification
-
-- 11 backend tests passed with isolated SQLite, and the same 11 passed with real PostgreSQL 16 in Docker, including after switching the runtime to system libpq.
-- 10 AI policy tests, 12 chart/deployment/recovery tests, 1 CLI regression test, and 3 React tests passed. Together with the 11 backend cases, that is 37 distinct tests; the PostgreSQL run repeats the backend cases.
-- Full Docker Compose startup, public-proxy smoke create/read, and persistence after backend restart passed.
-- Frontend production build, Python lint/format, workflow/value formatting, Helm lint, AWS/GCP render-only output parsing, Terraform format/schema validation, and Actionlint passed.
-- Browser submission/search/reload and desktop/mobile layouts were inspected.
-- Dependency audits were clear at the time tested.
-- Final local **arm64** frontend/backend images had zero fixable HIGH/CRITICAL findings in Trivy. This does not establish that future bases or Linux amd64 release images stay clear; the release flow scans them again.
-- A local readiness window had 20 requests, zero failures, approximately 11ms p95; this is smoke evidence, not a performance benchmark.
-- GitHub CI for `e97221b` passed all four jobs; link above.
-- Known non-failing warning: Starlette test client deprecates its httpx compatibility path.
-
-## Remaining real-world work
-
-On the configured laptop:
-
-1. Pull current main and inspect Git status/user changes. Install tools/dependencies listed in `docs/full-flow.md`.
-2. Verify actual AWS/GCP identities, projects, permissions, billing, quotas, and supported cluster versions. Configure remote-state buckets and real laptop/runner egress CIDRs.
-3. Configure GHCR publishing and cluster image pulls. For private images, use a suitably scoped persistent read token or pre-existing namespace pull secret; never persist the short-lived Actions publishing token in Kubernetes. Configure optional live AI credentials/model if required.
-4. Copy/edit ignored AWS/GCP `.tfvars`; execute the full flow once per cloud. No actual project IDs, account IDs, bucket names, secrets, or deployed URLs were supplied in this repository.
-5. Verify actual public URLs and application persistence. Exercise a deliberately failing release and confirm recovery on each real cluster; mocked recovery tests are not live rollback evidence.
-6. Record observed URLs, digests, chart version, workflow links, health reports, and rollback results in `docs/verification.md`. Public two-cloud URLs remain incomplete until observed.
-
-Primary instructions/commands: [full-flow guide](full-flow.md). Architecture/bootstrap: [README](../README.md). Chart mapping: [integration details](common-chart-integration.md). Requirements: [traceability](requirements.md). Operations/limitations: [operations](operations.md).
-
-## Local-only artifacts and boundaries
-
-The original case-study PDF is not committed. Credentials, `.env`, local `.tfvars`, Terraform state/plan/cache, virtual environments, node_modules, screenshots, and generated reports are excluded by `.gitignore`. Do not upload them as a substitute for this handoff. A localhost URL or generated configuration is not evidence of a successful public cloud deployment.
-
-The application is intentionally an anonymous, basic board. Authentication, moderation, pagination, production TLS/domain setup, full monitoring/alerting, future versioned schema migrations, autoscaling, and comprehensive cluster telemetry/alerting are beyond the implemented case-study baseline and should not be described as already present.
+Remaining assignment work: GCP live deployment and second URL. Production work includes trusted HTTPS/DNS, authentication/moderation, availability, monitored backups/restores and alerting as described in [platform review](platform-review.md) and [operations](operations.md). Application deployments under Argo must use the GitOps flow, never the manual Helm path.

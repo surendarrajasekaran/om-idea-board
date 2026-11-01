@@ -1,6 +1,8 @@
+import argparse
 import io
 import json
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -15,6 +17,7 @@ from scripts.ai_ops import (
     assess,
 )
 from scripts.gitops_monitor import wait_for_release
+from scripts.gitops_release import publish
 from scripts.gitops_state import current, mark_healthy, recover_images, save_release
 
 
@@ -171,6 +174,73 @@ class GitOpsRecoveryTests(unittest.TestCase):
         self.publish("healthy", "a")
         self.assertTrue(mark_healthy(self.root, self.target, "healthy"))
         self.assertFalse(mark_healthy(self.root, self.target, "healthy"))
+
+
+@unittest.skipUnless(shutil.which("helm"), "Helm is required for GitOps rendering")
+class GitOpsPublishingTests(unittest.TestCase):
+    def test_publish_into_repository_without_chart_copies(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            profile = root / "profile.json"
+            profile.write_text(
+                json.dumps(
+                    {
+                        "environment": "test",
+                        "source": "policy-fallback",
+                        "profile": {
+                            "replicas": 1,
+                            "cpu_request": "250m",
+                            "memory_request": "128Mi",
+                            "rationale": "Test canonical chart publishing",
+                        },
+                    }
+                )
+            )
+            selected = images("a")
+            publish(
+                argparse.Namespace(
+                    gitops_dir=root / "gitops",
+                    target="idea-board-aws-test",
+                    release_id="canonical-chart",
+                    source_commit="a" * 40,
+                    name="idea-board",
+                    cloud="aws",
+                    environment="test",
+                    profile=profile,
+                    frontend_image=selected["frontend"],
+                    backend_image=selected["backend"],
+                    tls_secret="",
+                    public_host="",
+                    public_url="http://example.test",
+                    require_ai=False,
+                    database_egress_cidr=["10.40.32.0/20"],
+                )
+            )
+            metadata = current(root / "gitops", "idea-board-aws-test")
+            self.assertEqual(metadata["images"], selected)
+            self.assertEqual(metadata["source_commit"], "a" * 40)
+            self.assertFalse((root / "gitops/charts").exists())
+            for component in ("frontend", "backend"):
+                path = (
+                    root
+                    / f"gitops/environments/idea-board-aws-test/manifests/{component}.yaml"
+                )
+                documents = list(yaml.safe_load_all(path.read_text()))
+                self.assertFalse(
+                    any(
+                        "helm.sh/hook" in doc["metadata"].get("annotations", {})
+                        for doc in documents
+                    )
+                )
+                deployment = next(
+                    doc for doc in documents if doc["kind"] == "Deployment"
+                )
+                container = deployment["spec"]["template"]["spec"]["containers"][0]
+                self.assertEqual(container["image"], selected[component])
+                self.assertIn(
+                    {"name": "RELEASE_ID", "value": "canonical-chart"}, container["env"]
+                )
+                self.assertEqual(container["resources"]["requests"]["memory"], "128Mi")
 
 
 class ProviderAndObservationTests(unittest.TestCase):

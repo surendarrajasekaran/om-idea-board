@@ -1,4 +1,6 @@
-# Full flow on the configured laptop
+# Manual cloud deployment
+
+This guide is for separate targets outside Argo ownership. The running AWS test application uses the [ECR/GitOps pipeline](gitops.md); do not run this direct Helm path against that application. The former GHCR/direct-Helm Actions workflow has been retired.
 
 The code is ready to execute; real cloud provisioning/public URL verification has not been performed on the development laptop. Do not mark those deliverables complete until the commands below succeed on each cloud.
 
@@ -76,11 +78,8 @@ A failed rollout or post-deployment check restores recorded Helm revisions and c
 
 Staging can use HTTP; production requires `--tls-secret EXISTING_TLS_SECRET --public-host board.your-domain.example`. Provision a trusted TLS certificate Secret in the target namespace, then point DNS at the printed load-balancer address while the deployer waits for readiness. Certificate issuance/renewal and private runner routing remain prerequisites; see the module guide. The board remains anonymous, and smoke verification adds one labeled idea. Namespace security controls persist independently of Helm rollbacks.
 
-## GitHub Actions equivalent
+## GitHub Actions
 
-1. Configure the four cloud/environment environments and OIDC/state/runner variables in the README. Provide private cluster routing and include its actual source CIDR in the API allowlist. Use `INFRA_TFVARS_JSON` for non-secret capacity/network overrides and `STACK_NAME` consistently for a reused stack. Set `TLS_SECRET` and `PUBLIC_HOST` for production. Install AWS CLI on the trusted `idea-board` runner; GCP tooling is installed by its workflow steps.
-2. Run **Infrastructure**, selecting cloud/environment and `apply`.
-3. Run **Release and deploy**, selecting the same cloud/environment, `deploy=true`, and the AI requirement. It tests, prepares a profile, builds/scans/publishes images, and deploys using those exact artifacts. Set `GHCR_READ_TOKEN` + `GHCR_USERNAME`, `REGISTRY_PULL_SECRET`, or `GHCR_IMAGES_PUBLIC=true` for cluster pulls.
-4. Download the sanitized deployment evidence artifact and update the actual URL record.
+The current application pipeline is [AWS ECR and Argo CD GitOps release](../.github/workflows/gitops-release.yml), documented in [GitOps delivery](gitops.md). It runs on relevant main changes, including canonical chart/component values, or manual dispatch. Infrastructure plan/apply remains a separate manual workflow on the trusted private runner.
 
-No cloud run is triggered automatically by a source push. PR/main push CI verifies the code; privileged provisioning and release operations are explicit dispatches on main.
+For a separate non-Argo AWS/GCP target, use the manual commands above with that target's own state, credentials and private routing. The retired direct-Helm Actions workflow is no longer a supported deployment entry point.

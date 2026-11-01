@@ -309,9 +309,9 @@ class Deployment:
         raise RuntimeError("Timed out waiting for the public load balancer")
 
 
-def deploy(args, *, chart=None, values_root=None):
-    chart = chart or CHART
-    values_root = values_root or ROOT / "deploy"
+def deploy(args):
+    chart = CHART
+    values_root = ROOT / "deploy"
     os.umask(0o077)
     name = getattr(args, "name", "idea-board")
     tls_secret = getattr(args, "tls_secret", "")

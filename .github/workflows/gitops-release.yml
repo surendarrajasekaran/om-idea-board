@@ -6,6 +6,10 @@ on:
       - backend/**
       - frontend/**
       - scripts/**
+      - deploy/charts/**
+      - deploy/frontend/**
+      - deploy/backend/**
+      - deploy/clouds/**
       - .github/workflows/gitops-release.yml
   workflow_dispatch:
     inputs:

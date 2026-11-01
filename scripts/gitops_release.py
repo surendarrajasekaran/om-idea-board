@@ -36,11 +36,9 @@ def publish(args):
             render_only=True,
             database_egress_cidr=args.database_egress_cidr,
         )
-        deploy(
-            config,
-            chart=args.gitops_dir / "charts/nucleus",
-            values_root=args.gitops_dir / "charts/config",
-        )
+        # Render the reviewed chart and values from this application source commit.
+        # The GitOps repository stores desired state and recovery snapshots only.
+        deploy(config)
         manifests = {}
         for component in ("backend", "frontend"):
             documents = []

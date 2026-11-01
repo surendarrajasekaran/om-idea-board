@@ -18,9 +18,9 @@ For Compose failures: inspect `docker compose ps`, `docker compose logs migrate`
 
 ## Rollback policy
 
-The health CLI returns code 3 for rollback recommendations. Hard-gate failures always fail the release, regardless of AI opinion. Invalid evidence/required AI failure returns code 2 and must also fail deployment verification. The deploy orchestrator records the successful revision of each release and restores attempted releases in reverse order on failure. A failed first installation is uninstalled. The overall command still exits nonzero after recovery.
+The Argo-managed AWS test application recovers through Git. The health workflow verifies release convergence, HTTP readiness and create/read behavior, then commits a previous verified snapshot's images/resources if recovery is required. Current security controls and Secret references persist. Snapshot hashes, expected-release checks and fast-forward pushes reject corrupted/stale observations. A pending recovery must converge and pass checks before it is marked healthy. The first installation has no automatic recovery target. See [GitOps delivery](gitops.md) for thresholds and guardrails.
 
-The deployment job records a known-good Helm revision before upgrade, restores that revision when checks fail, waits for rollout and HTTP recovery, and retains a failed status even when recovery succeeds. A first release has no previous revision. Do not silently use `revision - 1`, which could target a failed release.
+The standalone health CLI returns code 3 for rollback recommendations and code 2 for invalid evidence or required-live AI failure. Manual deployment of separate targets outside Argo ownership records known-good Helm revisions and restores attempted releases in reverse order on failure; a failed first installation is uninstalled. That command remains unsuccessful after recovery. Do not run manual Helm recovery against the Argo-managed AWS test application.
 
 ## Security and scope limits
 

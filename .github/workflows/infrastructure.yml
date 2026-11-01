@@ -79,7 +79,7 @@ jobs:
       - if: inputs.operation == 'apply'
         run: terraform -chdir=infra apply release.tfplan
       - name: Explain deployment boundary
-        run: echo 'Infrastructure provisioned/planned. Run Release and deploy, or scripts/run_platform.py, to roll out the application.' >> "$GITHUB_STEP_SUMMARY"
+        run: echo 'Infrastructure plan/apply finished. Follow docs/gitops.md for AWS test delivery or docs/full-flow.md for separate manual cloud targets.' >> "$GITHUB_STEP_SUMMARY"
       - name: Remove local sensitive plan
         if: always()
         run: python -c "from pathlib import Path; Path('infra/release.tfplan').unlink(missing_ok=True); import os; (Path(os.environ['RUNNER_TEMP'])/'platform.tfvars.json').unlink(missing_ok=True)"
