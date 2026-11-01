@@ -2,7 +2,7 @@
 
 This guide is for separate targets outside Argo ownership. It requires a sibling `infra-helm-charts` checkout (or `GITOPS_DIR`) containing the common chart and component values. The running AWS test application uses the [ECR/GitOps pipeline](gitops.md); do not run this direct Helm path against that application. The former GHCR/direct-Helm Actions workflow has been retired.
 
-The code is ready to execute; real cloud provisioning/public URL verification has not been performed on the development laptop. Do not mark those deliverables complete until the commands below succeed on each cloud.
+AWS test provisioning and public URL verification are recorded in [verification](verification.md). GCP live deployment remains outstanding. This manual guide applies to additional targets outside Argo ownership.
 
 ## 1. Pull and install prerequisites
 
@@ -80,6 +80,6 @@ Staging can use HTTP; production requires `--tls-secret EXISTING_TLS_SECRET --pu
 
 ## GitHub Actions
 
-The current application pipeline is [AWS ECR and Argo CD GitOps release](../.github/workflows/gitops-release.yml), documented in [GitOps delivery](gitops.md). It runs on relevant main changes, including canonical chart/component values, or manual dispatch. Infrastructure plan/apply remains a separate manual workflow on the trusted private runner.
+The current application pipeline is [AWS ECR and Argo CD GitOps release](../.github/workflows/gitops-release.yml), documented in [GitOps delivery](gitops.md). It runs on relevant application main changes or manual dispatch. Canonical chart/component values live in the separate GitOps repository. Infrastructure plan/apply remains a separate manual workflow on the trusted private runner.
 
 For a separate non-Argo AWS/GCP target, use the manual commands above with that target's own state, credentials and private routing. The retired direct-Helm Actions workflow is no longer a supported deployment entry point.

@@ -21,11 +21,11 @@ flowchart LR
 
 `.github/workflows/gitops-release.yml` runs on relevant application changes to main or through **Run workflow**. The developer can enter a goal such as `Cost-sensitive test environment for a small team` in that form; automatic source pushes use that default. The planner accepts only bounded values. Test profiles use one replica and at most 250m requested CPU per application; production retains its two-replica minimum in the shared planner.
 
-After tests, the pipeline uses GitHub OIDC to assume the ECR publisher role. That role can publish only the frontend/backend repositories for this stack. Images have unique immutable tags, captured SHA-256 digests, SBOM/provenance and a fixable HIGH/CRITICAL image scan gate. A dedicated repository deploy key publishes rendered manifests and release metadata to the GitOps repository. No database passwords, CA Secrets or registry credentials enter Git.
+After tests, the pipeline uses GitHub OIDC to assume the ECR publisher role. That role can publish only the frontend/backend repositories for this stack. Images have unique immutable tags, captured SHA-256 digests, SBOM/provenance and a fixable HIGH/CRITICAL image scan gate. A dedicated repository deploy key publishes Helm values, rendered snapshots and release metadata to the GitOps repository. No database passwords, CA Secrets or registry credentials enter Git.
 
 The chart and values live in `infra-helm-charts`: `helm-common/nucleus`, `helm-common/nucleus-source.json`, `helm-overides/idea-fe/custom-values.yaml` and `helm-overides/idea-be/custom-values.yaml`. The chart remains the unchanged user-supplied nucleus 1.1.0. CI overlays immutable image tags/digests, validated resources and release identity onto the current component values, preserves their security/Secret settings, previews the exact Helm render and commits both values files plus checksummed snapshots.
 
-Argo CD has three related sources: the common chart rendered as `idea-board-backend`, the same chart rendered as `idea-board-frontend`, and namespace security controls from `environments/<target>/manifests/controls.yaml`. Helm test hooks are skipped. Argo applies controls first, backend next and frontend last. The other rendered files under `manifests` are recovery/evidence inputs and are excluded from Argo’s directory source. Annotation tracking preserves existing Helm selector labels. The AppProject permits only approved namespaced resources, excluding Secrets and cluster resources; namespace and credential/CA Secrets remain bootstrap responsibilities.
+Argo CD maintains exactly two Applications: `idea-board-backend` and `idea-board-frontend`. Both render the common chart with their own values and stable Helm release name. Backend also includes namespace security controls from `environments/<target>/manifests/controls.yaml`; controls precede backend resources through sync waves. Helm test hooks are skipped. The two Applications reconcile independently, so Application annotations do not guarantee backend-before-frontend ordering. The paired HTTP release monitor waits for both components before assessing a release. The other rendered files under `manifests` are recovery/evidence inputs and are excluded from Argo’s directory source. Annotation tracking preserves existing Helm selector labels. The AppProject permits only approved namespaced resources, excluding Secrets and cluster resources; namespace and credential/CA Secrets remain bootstrap responsibilities.
 
 Application CI fetches the pinned GitOps revision in `deploy/gitops/chart-source.json` for chart-contract checks, without duplicating the chart in the source repository. Local checks use a sibling GitOps checkout or `GITOPS_DIR`. GitOps chart/value changes have their own validation workflow.
 
@@ -64,7 +64,7 @@ Recovery updates the same Helm values with previous verified images, replicas an
 
 1. In application Actions, run **Check live AI provider** on `main` and enter a resource goal. Its **AI resource plan** job-summary table and step logs show configured provider/model, goal, accepted replicas/CPU/memory, rationale and result source. `live-ai` is a validated live response; fallback and skipped calls are labeled explicitly. This workflow makes one planning call and does not deploy.
 2. For end-to-end delivery, run **AWS ECR and Argo CD GitOps release**, enter the goal and enable `require_ai`. Show the plan summary, image build/scan results, then the GitOps commit updating `helm-overides/idea-fe/custom-values.yaml` and `helm-overides/idea-be/custom-values.yaml`.
-3. Show Argo’s two Helm sources using `helm-common/nucleus` with those values. The frontend and backend are separate Deployments/Services with existing stable names. Argo coordinates controls, backend and frontend through sync waves.
+3. Show the two Argo Applications, `idea-board-backend` and `idea-board-frontend`, rendering `helm-common/nucleus` with those values. Each owns its existing Deployment/Service. Backend also owns the shared namespace controls; both Applications sync independently.
 4. Open the newly triggered GitOps health run. Its **AI health assessment** summary shows aggregate evidence, final keep/rollback decision and rationale. Already healthy unchanged releases skip the model, so use a new-release run when demonstrating live AI assessment. Health checks and successful create/read verify the deployed release.
 
 A successful visible planning example is [run 41289856695](https://github.com/surendarrajasekaran/om-idea-board/actions/runs/41289856695). The direct-Helm release is [run 41291253782](https://github.com/surendarrajasekaran/om-idea-board/actions/runs/41291253782), with [live AI health evidence](https://github.com/surendarrajasekaran/infra-helm-charts/actions/runs/41291414658). Sign into GitHub to inspect the full run presentation and download artifacts.
@@ -98,10 +98,23 @@ Download the official Argo chart referenced by `deploy/argocd/chart-lock.json`, 
 python scripts/bootstrap_gitops.py --context idea-board-test \
   --account-id 812752207041 --region us-west-2 \
   --chart /path/to/verified/argo-cd.tgz \
-  --application ../infra-helm-charts/bootstrap/idea-board-test.yaml
+  --project ../infra-helm-charts/bootstrap/idea-board-project.yaml \
+  --application-chart ../infra-helm-charts/helm-templates/argocd-app-controller \
+  --application-values ../infra-helm-charts/bootstrap/idea-board-applications.yaml
 ```
 
-The bootstrap verifies the AWS account, Terraform target and Kubernetes CA, applies namespace policies and Secrets through stdin, then installs Argo and its scoped Application. Argo's UI is ClusterIP-only. Access it through the private tunnel using `kubectl -n argocd port-forward svc/argocd-server 8443:443`; retrieve its initial administrator password through an authorized secret-read operation without putting it in chat, logs or Git. Replace the initial credential after login.
+The bootstrap verifies the AWS account, Terraform target and Kubernetes CA, applies namespace policies and Secrets through stdin, then installs Argo, its scoped AppProject and Helm bootstrap release `idea-board-test-apps`. That release renders exactly two Application resources from a reusable chart; it creates no additional controller Pods or parent Application. The controller release remains `argocd`. Argo's UI is ClusterIP-only. Access it through the private tunnel using `kubectl -n argocd port-forward svc/argocd-server 8443:443`; retrieve its initial administrator password through an authorized secret-read operation without putting it in chat, logs or Git. Replace the initial credential after login.
+
+To update Application definitions after bootstrap, review/render the generic chart and upgrade its separate release through the private connection:
+
+```sh
+helm upgrade --install idea-board-test-apps \
+  ../infra-helm-charts/helm-templates/argocd-app-controller \
+  --namespace argocd --kube-context idea-board-test --atomic --wait \
+  -f ../infra-helm-charts/bootstrap/idea-board-applications.yaml
+```
+
+The chart defaults to no cascading-deletion finalizer and adds no replica-ignore rules. Removing an Application definition leaves its workloads in place; retiring workloads requires a separate explicit operation. For migration from the former `idea-board-test` Application, pause its sync, back up its definition, remove only that Application without cascading deletion, and transfer tracking annotations on the exact existing resources to their new owner before enabling the new Applications. Preserve resource UIDs, selectors and the LoadBalancer address. See Argo's [tracking](https://argo-cd.readthedocs.io/en/stable/user-guide/resource_tracking/) and [deletion](https://argo-cd.readthedocs.io/en/stable/user-guide/app_deletion/) documentation. Never run both old and new owners concurrently.
 
 After the frontend load balancer is reachable, configure `PUBLIC_URL` in the source repository's `aws-test` environment and the current GitOps `release.json`. That enables independent health checks. Test ingress is HTTP and the board is anonymous; use synthetic data. Production needs a trusted certificate/domain and application access controls appropriate to its use.
 
@@ -119,7 +132,7 @@ The hardened-image scan covers its recognized distribution packages; Trivy repor
 
 When rotating database/CA or TLS Secrets, bootstrap the new values through the authenticated private connection and publish a new GitOps release to restart pods and reload them. Git does not hold Secret bytes, so editing a Secret alone does not automatically change an application's pod template. Validate connections/certificates after rotation.
 
-The controller has a 300-second sync-operation deadline and the Application uses `retry.refresh=true`. A failed rollout therefore cannot hold an old revision indefinitely while a recovery commit waits in Git. The normal HTTP convergence allowance is 600 seconds; the CLI accepts an explicitly bounded 30-1800 second override for controlled exercises. Detection/reconciliation are periodic and are not an instantaneous rollback guarantee.
+The controller has a 300-second sync-operation deadline and both Applications use `retry.refresh=true`. A failed rollout therefore cannot hold an old revision indefinitely while a recovery commit waits in Git. The normal HTTP convergence allowance is 600 seconds; the CLI accepts an explicitly bounded 30-1800 second override for controlled exercises. Detection/reconciliation are periodic and are not an instantaneous rollback guarantee.
 
 An expired SSM session only affects private administration, but it can interrupt an in-progress controller Helm operation. Check Helm history and restore the last deployed **controller** revision before retrying its update if it is left `pending-upgrade`. This is distinct from application recovery, which always changes Git. The selected Helm chart has no `applicationSet.enabled` switch, so the unused test ApplicationSet controller is configured with `replicas: 0` rather than relying on an ignored value.
 

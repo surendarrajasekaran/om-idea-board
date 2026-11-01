@@ -7,6 +7,17 @@ import unittest
 
 
 class CLITests(unittest.TestCase):
+    def test_application_repository_does_not_track_helm_chart_copies(self):
+        root = Path(__file__).resolve().parents[1]
+        tracked = subprocess.check_output(
+            ["git", "ls-files", "--", "helm-common", "helm-overides", "helm-templates"],
+            cwd=root,
+            text=True,
+        )
+        self.assertEqual(
+            tracked.strip(), "", "Helm chart ownership belongs to infra-helm-charts"
+        )
+
     def test_entrypoints_do_not_shadow_standard_library(self):
         root = Path(__file__).resolve().parents[1]
         for name in (

@@ -96,7 +96,7 @@ def _scan(kind, reference, scratch):
         )
     else:
         # Mount only reviewable source, excluding state, local variable files, credentials,
-        # .git, dependency caches and the unchanged vendor chart.
+        # .git and dependency caches. GitOps charts live in a separate checkout.
         files = (
             subprocess.check_output(
                 ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
@@ -111,8 +111,6 @@ def _scan(kind, reference, scratch):
             for relative in files:
                 source = ROOT / relative
                 if not relative or not source.is_file() or source.is_symlink():
-                    continue
-                if relative.startswith("helm-common/nucleus/"):
                     continue
                 if source.name != "Dockerfile" and source.suffix not in {
                     ".tf",

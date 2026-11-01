@@ -104,7 +104,26 @@ def bootstrap(args):
             str(ROOT / "deploy/argocd/test-values.yaml"),
         ]
     )
-    run(["kubectl", "--context", args.context, "apply", "-f", str(args.application)])
+    run(["kubectl", "--context", args.context, "apply", "-f", str(args.project)])
+    run(
+        [
+            "helm",
+            "upgrade",
+            "--install",
+            f"{args.name}-{args.environment}-apps",
+            str(args.application_chart),
+            "--namespace",
+            "argocd",
+            "--kube-context",
+            args.context,
+            "--atomic",
+            "--wait",
+            "--timeout",
+            "600s",
+            "-f",
+            str(args.application_values),
+        ]
+    )
     print(f"Argo CD bootstrapped; Git owns application desired state in {namespace}")
 
 
@@ -116,7 +135,9 @@ def main():
     parser.add_argument("--name", default="idea-board")
     parser.add_argument("--environment", choices=["test", "staging"], default="test")
     parser.add_argument("--chart", type=Path, required=True)
-    parser.add_argument("--application", type=Path, required=True)
+    parser.add_argument("--project", type=Path, required=True)
+    parser.add_argument("--application-chart", type=Path, required=True)
+    parser.add_argument("--application-values", type=Path, required=True)
     args = parser.parse_args()
     try:
         bootstrap(args)
