@@ -20,7 +20,7 @@ flowchart LR
   Decision -->|recovery needed| Git
 ```
 
-The [GitOps repository](https://github.com/surendarrajasekaran/infra-helm-charts) owns `helm-templates/nucleus` and `helm-overides/idea-fe|idea-be/custom-values.yaml`. CI updates each component’s immutable image tag/digest and validated resources in those values files. Argo CD renders the shared chart twice using separate Helm release names, producing separate frontend/backend Deployments and Services. Two separate Argo Applications, `idea-board-backend` and `idea-board-frontend`, are created by the generic GitOps `helm-templates/argocd-app-controller` chart. Backend also owns the namespace security controls. Rendered snapshots are retained for validation and recovery; Argo consumes the Helm values directly.
+The [GitOps repository](https://github.com/surendarrajasekaran/infra-helm-charts) owns `helm-templates/nucleus` and `helm-overides/idea-fe|idea-be/custom-values.yaml`. CI updates each component’s immutable image tag/digest and validated resources in those values files. Argo CD renders the shared chart twice using separate Helm release names, producing separate frontend/backend Deployments and Services. The parent Argo Application in `argocd-manifests` renders the generic `helm-templates/argocd-app-controller` chart and maintains two child Applications, `idea-board-backend` and `idea-board-frontend`. Backend also owns the namespace security controls. Rendered snapshots are retained for validation and recovery; Argo consumes the Helm values directly.
 
 The frontend proxies `/api` to the backend; PostgreSQL remains private. The public test board is anonymous and uses HTTP, so use synthetic data.
 

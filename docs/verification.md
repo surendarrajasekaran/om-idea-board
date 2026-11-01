@@ -2,6 +2,16 @@
 
 Earlier baseline verified locally on October 29, 2026. CI workflows define repeatable checks; remote run results are available in the repository's GitHub Actions. AWS test apply progress is recorded separately below; earlier local results do not imply a completed cloud deployment.
 
+## November 1 Argo parent and reduced GitOps folders
+
+GitOps now uses `argocd-manifests` for the parent Application, two scoped AppProjects and namespace controls. Parent `idea-board-controller` renders the generic app-controller chart with its overrides and owns `idea-board-backend` and `idea-board-frontend`. The old standalone `idea-board-test-apps` Helm release was uninstalled using Helm's keep policy; both child Application UIDs were preserved. Only Helm release `argocd` remains in that namespace.
+
+Private verification returned Synced/Healthy without conditions for all three Applications, and both children carried the parent's Argo tracking annotation. All eight existing workload/resource UIDs and specifications remained unchanged during transfer. The parent project can manage only Applications in `argocd`; the workload project still denies Secrets and cluster resources. Future child-definition changes reconcile from Git rather than an operator Helm upgrade.
+
+The `environments` directory and redundant current rendered service YAML were removed. Current `release.json` and `status.json` moved beside immutable snapshots under `releases/idea-board-aws-test`; network policies moved to `argocd-manifests/idea-board-aws-test/controls.yaml`. Snapshot contents/checksums remain unchanged. Publishing and recovery tests cover the new state paths and the absence of duplicate current service renders.
+
+The copied `automation` directory was removed. Health workflow checks out pinned reviewed source `e5da068` for its scripts and dependencies. [GitOps validation](https://github.com/surendarrajasekaran/infra-helm-charts/actions/runs/41297064367) and [health using source checkout](https://github.com/surendarrajasekaran/infra-helm-charts/actions/runs/41297064323) passed. Local checks passed all 65 script/platform tests, including the parent project's scope, actual Helm rendering and guarded recovery.
+
 ## November 1 unified chart and override layout
 
 The current GitOps layout places nucleus at `helm-templates/nucleus` (provenance at `helm-templates/nucleus-source.json`) and Application definitions' values at `helm-overides/argocd-app-controller/custom-values.yaml`. The generic chart remains `helm-templates/argocd-app-controller`; frontend/backend overrides retain their existing locations. Superseded `helm-common` and `bootstrap/idea-board-applications.yaml` paths were removed after the live cutover. Bootstrap retains only the scoped AppProject manifest.
