@@ -60,6 +60,15 @@ HTTP failure rate above 5%, p95 above 1500 ms, failed version convergence or a f
 
 Recovery updates the same Helm values with previous verified images, replicas and application resource requests/limits, re-renders the current chart, and saves a new checksummed recovery snapshot. Older manifest-only snapshots remain valid recovery candidates. It preserves current network/security controls, database/TLS/CA Secret references and other pod hardening. It does not reverse database migrations, restore data or destroy infrastructure. Schema migrations must therefore remain compatible with the previous application version. Argo CD reconciles the recovery commit; the next monitor must verify it before calling recovery successful.
 
+## Demo
+
+1. In application Actions, run **Check live AI provider** on `main` and enter a resource goal. Its **AI resource plan** job-summary table and step logs show configured provider/model, goal, accepted replicas/CPU/memory, rationale and result source. `live-ai` is a validated live response; fallback and skipped calls are labeled explicitly. This workflow makes one planning call and does not deploy.
+2. For end-to-end delivery, run **AWS ECR and Argo CD GitOps release**, enter the goal and enable `require_ai`. Show the plan summary, image build/scan results, then the GitOps commit updating `helm-overides/idea-fe/custom-values.yaml` and `helm-overides/idea-be/custom-values.yaml`.
+3. Show Argo’s two Helm sources using `helm-common/nucleus` with those values. The frontend and backend are separate Deployments/Services with existing stable names. Argo coordinates controls, backend and frontend through sync waves.
+4. Open the newly triggered GitOps health run. Its **AI health assessment** summary shows aggregate evidence, final keep/rollback decision and rationale. Already healthy unchanged releases skip the model, so use a new-release run when demonstrating live AI assessment. Health checks and successful create/read verify the deployed release.
+
+A successful visible planning example is [run 41289856695](https://github.com/surendarrajasekaran/om-idea-board/actions/runs/41289856695). The direct-Helm release is [run 41291253782](https://github.com/surendarrajasekaran/om-idea-board/actions/runs/41291253782), with [live AI health evidence](https://github.com/surendarrajasekaran/infra-helm-charts/actions/runs/41291414658). Sign into GitHub to inspect the full run presentation and download artifacts.
+
 ## Provisioning and private administration
 
 The selected target is AWS account `812752207041` (`mit-qa-administratoraccess`), `us-west-2`, name `idea-board`, environment `test`. The default network `10.40.0.0/16` is separate from existing account workloads. Test capacity is one on-demand `t3.medium`, one managed NAT gateway and private `db.t3.micro` PostgreSQL. This is a cost-conscious demonstration with single-node availability limits; EKS, NAT, RDS, worker, public load balancer, logs and storage remain chargeable while it exists.

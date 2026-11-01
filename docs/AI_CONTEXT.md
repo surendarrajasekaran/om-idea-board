@@ -11,6 +11,14 @@ Updated November 1, 2026. This file records current project state; historical te
 - Argo CD owns the AWS test application's rollout and Git-based recovery. The old GHCR/direct-Helm Actions workflow is retired. Manual `run_platform.py`/`deploy.py` remain for separate, non-Argo targets and shared rendering/bootstrap utilities.
 - Both cloud Terraform implementations remain part of the assignment. AWS is deployed; GCP deployment and its second public URL are still outstanding.
 
+## Latest Helm migration and demo evidence
+
+Source `d5a7717` passed CI `41291253831` (58 script/platform cases; 74 application/platform overall plus 11 Terraform cases) and ECR/GitOps release `41291253782`. GitOps `16a83ee` published Helm values and checksummed rendered/value snapshots for release `d5a7717f2cbe9164dfb98d365435f602cbcd8a98-41291253782-1`. The live Argo Application was applied with backend Helm, frontend Helm and a controls-only directory source; private API verification returned Synced/Healthy, three matching revisions, no conditions and two ready Deployments. New-release health `41291414658` returned live-ai/keep, create/read passed, 20 requests, zero failures, p95 96.12 ms.
+
+Planner/health commands now print safe input and accepted result and write escaped job-summary tables. AI-check accepts a goal; visible planning demo `41289856695` passed. Tests cover redaction, HTML/log injection, fallback labels and Helm recovery from old/new snapshots. See [demo steps](gitops.md#demo) and [verification](verification.md).
+
+The final image/resource-only publisher follow-up `89f5f4e` passed CI `41292570632`, release `41292570647` and health `41292767079`. Argo reconciled the new Helm value commit automatically and was Synced/Healthy; both ready Deployments matched their values' images/resources/release IDs. Normal publication preserves current database/CA Secret references as well as recovery. Later GitOps `release.json`/`status.json` remain authoritative.
+
 ## Verified AWS baseline
 
 Account `812752207041`, profile `mit-qa-administratoraccess`, region `us-west-2`, name `idea-board`, environment `test`, namespace/cluster `idea-board-test`. Preserve unrelated account resources, including `louvre` and `signal-demo` workloads.
