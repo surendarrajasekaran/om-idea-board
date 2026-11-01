@@ -17,6 +17,8 @@ Both charts are under GitOps `helm-templates`: `nucleus` and `argocd-app-control
 
 Private Helm bootstrap release `idea-board-test-apps` revision 2 switched both live Applications to the new chart path. Both were Synced/Healthy and all eight resource UIDs/specifications stayed unchanged. Original chart checksums and rendered resources were preserved. GitOps `45ae6e4` removed the superseded directory; source CI pins that cleaned revision. All 64 script/platform tests passed with updated publisher/recovery paths; source and GitOps recovery helpers are synchronized.
 
+Source `274b9ce` passed CI `41295652661`, release `41295652686` and GitOps layout/value validation `41295618991` / `41295856633`. GitOps `79c6b60` published its release; both Applications were Synced/Healthy with exact image/resource/release matches and original resource UIDs. Health `41295856757` passed live-ai/keep, paired convergence, create/read, 20 requests with zero failures and p95 156.88 ms. All 11 preexisting recovery snapshots passed checksum checks during cleanup; latest release/history files remain authoritative.
+
 ## Two-Application bootstrap and ownership
 
 GitOps `de890e7` adds the generic Application chart and removes the old combined `bootstrap/idea-board-test.yaml`. Application definitions are installed/upgraded through Helm bootstrap release `idea-board-test-apps`; component image/resource values still reconcile automatically from Git. Both Applications were privately verified Synced/Healthy, with no conditions. Migration preserved all eight resource UIDs and identical Deployment/Service specifications. Default deletion has no cascading finalizer; no replica-ignore rules weaken AI sizing reconciliation.
