@@ -9,10 +9,24 @@ import yaml
 
 try:
     from .deploy import deploy
-    from .gitops_state import current, identifier, save_release
+    from .gitops_state import (
+        VALUE_FILES,
+        current,
+        helm_manifests,
+        identifier,
+        merge_values,
+        save_release,
+    )
 except ImportError:
     from deploy import deploy
-    from gitops_state import current, identifier, save_release
+    from gitops_state import (
+        VALUE_FILES,
+        current,
+        helm_manifests,
+        identifier,
+        merge_values,
+        save_release,
+    )
 
 
 def publish(args):
@@ -36,36 +50,34 @@ def publish(args):
             render_only=True,
             database_egress_cidr=args.database_egress_cidr,
         )
-        # Render the reviewed chart and values from this application source commit.
-        # The GitOps repository stores desired state and recovery snapshots only.
-        deploy(config)
-        manifests = {}
+        deploy(config, gitops_dir=args.gitops_dir)
+        values = {}
         for component in ("backend", "frontend"):
-            documents = []
-            for document in yaml.safe_load_all(
-                (rendered / f"{component}-rendered.yaml").read_text()
-            ):
-                if not document or "helm.sh/hook" in document.get("metadata", {}).get(
-                    "annotations", {}
-                ):
-                    continue  # Helm test Pods are not application desired state.
-                document["metadata"].setdefault("annotations", {})[
-                    "argocd.argoproj.io/sync-wave"
-                ] = "0" if component == "backend" else "10"
-                if document["kind"] == "Deployment":
-                    pod = document["spec"]["template"]
-                    pod["metadata"].setdefault("annotations", {})[
-                        "idea-board/gitops-release"
-                    ] = args.release_id
-                    for container in pod["spec"]["containers"]:
-                        if container["name"] == component:
-                            container.setdefault("env", []).append(
-                                {"name": "RELEASE_ID", "value": args.release_id}
-                            )
-                documents.append(document)
-            manifests[f"{component}.yaml"] = yaml.safe_dump_all(
-                documents, sort_keys=False
+            data = merge_values(
+                yaml.safe_load((args.gitops_dir / VALUE_FILES[component]).read_text()),
+                json.loads((rendered / f"{component}-values.json").read_text()),
             )
+            if component == "frontend":
+                data = merge_values(
+                    data,
+                    yaml.safe_load(
+                        (
+                            Path(__file__).resolve().parents[1]
+                            / f"deploy/clouds/{args.cloud}.yaml"
+                        ).read_text()
+                    ),
+                )
+            data.setdefault("commonAnnotations", {})["argocd.argoproj.io/sync-wave"] = (
+                "0" if component == "backend" else "10"
+            )
+            data.setdefault("podAnnotations", {})["idea-board/gitops-release"] = (
+                args.release_id
+            )
+            data.setdefault("env", {})["RELEASE_ID"] = args.release_id
+            values[component] = data
+        manifests = helm_manifests(
+            args.gitops_dir, values, args.name, f"{args.name}-{args.environment}"
+        )
         controls = yaml.safe_load((rendered / "namespace-rendered.yaml").read_text())[
             "items"
         ]
@@ -86,7 +98,9 @@ def publish(args):
             "public_url": args.public_url
             or (current(args.gitops_dir, args.target) or {}).get("public_url", ""),
         }
-        save_release(args.gitops_dir, args.target, metadata, manifests)
+        save_release(
+            args.gitops_dir, args.target, metadata, manifests, helm_values=values
+        )
     print(f"Prepared immutable GitOps release {args.release_id} for {args.target}")
 
 

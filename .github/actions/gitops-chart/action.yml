@@ -1,0 +1,25 @@
+name: Load the reviewed GitOps chart
+description: Check out the pinned GitOps revision for offline chart contract tests
+runs:
+  using: composite
+  steps:
+    - id: source
+      shell: bash
+      run: |
+        python3 - <<'PY'
+        import json, os, re
+        from pathlib import Path
+        source = json.loads(Path('deploy/gitops/chart-source.json').read_text())
+        assert source['repository'] == 'surendarrajasekaran/infra-helm-charts'
+        assert re.fullmatch('[0-9a-f]{40}', source['revision'])
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+            output.write('revision=' + source['revision'] + '\n')
+        PY
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      with:
+        repository: surendarrajasekaran/infra-helm-charts
+        ref: ${{ steps.source.outputs.revision }}
+        path: artifacts/gitops-chart
+        persist-credentials: false
+    - shell: bash
+      run: echo "GITOPS_DIR=$GITHUB_WORKSPACE/artifacts/gitops-chart" >> "$GITHUB_ENV"

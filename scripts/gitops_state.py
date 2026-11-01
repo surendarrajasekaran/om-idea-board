@@ -4,11 +4,78 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 import time
 
 import yaml
 
 FILES = ("backend.yaml", "frontend.yaml", "controls.yaml")
+VALUE_FILES = {
+    "backend": "helm-overides/idea-be/custom-values.yaml",
+    "frontend": "helm-overides/idea-fe/custom-values.yaml",
+}
+
+
+def merge_values(base, override):
+    import copy
+
+    result = copy.deepcopy(base)
+    for key, value in override.items():
+        result[key] = (
+            merge_values(result[key], value)
+            if isinstance(value, dict) and isinstance(result.get(key), dict)
+            else copy.deepcopy(value)
+        )
+    return result
+
+
+def helm_manifests(root, values, name, namespace):
+    """Preview the exact chart/values Argo will render; no cluster connection."""
+    import tempfile
+
+    identifier(name)
+    identifier(namespace)
+    if set(values) != set(VALUE_FILES):
+        raise ValueError("Expected exactly the approved component values")
+
+    result = {}
+    with tempfile.TemporaryDirectory(prefix="gitops-helm-") as directory:
+        for component, data in values.items():
+            path = Path(directory) / f"{component}.yaml"
+            path.write_text(yaml.safe_dump(data, sort_keys=False))
+            rendered = subprocess.run(
+                [
+                    "helm",
+                    "template",
+                    f"{name}-{component}",
+                    str(Path(root) / "helm-common/nucleus"),
+                    "--namespace",
+                    namespace,
+                    "--skip-tests",
+                    "-f",
+                    str(path),
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout
+            documents = [item for item in yaml.safe_load_all(rendered) if item]
+            if any(
+                "helm.sh/hook" in item.get("metadata", {}).get("annotations", {})
+                for item in documents
+            ):
+                raise ValueError("Unexpected Helm hooks in application chart")
+            result[f"{component}.yaml"] = yaml.safe_dump_all(documents, sort_keys=False)
+    return result
+
+
+def image_coordinates(reference):
+    repository, digest = reference.split("@", 1)
+    if ":" in repository.rsplit("/", 1)[-1]:
+        repository, tag = repository.rsplit(":", 1)
+    else:
+        tag = "pinned"
+    return {"repository": repository, "tag": tag + "@" + digest}
 
 
 def identifier(value):
@@ -34,7 +101,7 @@ def current(root, target):
     return read_json(Path(root) / "environments" / identifier(target) / "release.json")
 
 
-def save_release(root, target, metadata, manifests, expected=None):
+def save_release(root, target, metadata, manifests, expected=None, *, helm_values=None):
     root, target = Path(root), identifier(target)
     release_id = identifier(metadata["id"])
     if set(manifests) != set(FILES):
@@ -48,6 +115,8 @@ def save_release(root, target, metadata, manifests, expected=None):
     archive = root / "releases" / target / release_id
     if archive.exists():
         raise ValueError("Release snapshots are immutable; use a new release ID")
+    if helm_values is not None and set(helm_values) != set(VALUE_FILES):
+        raise ValueError("Expected exactly the approved component values")
     metadata = {
         **metadata,
         "target": target,
@@ -72,6 +141,19 @@ def save_release(root, target, metadata, manifests, expected=None):
     archive.mkdir(parents=True)
     for file, content in manifests.items():
         (archive / file).write_text(content)
+    if helm_values is not None:
+        metadata["delivery"] = "helm"
+        metadata["helm_values_hashes"] = {}
+        for component, values in helm_values.items():
+            content = yaml.safe_dump(values, sort_keys=False)
+            file = f"{component}-values.yaml"
+            metadata["helm_values_hashes"][file] = hashlib.sha256(
+                content.encode()
+            ).hexdigest()
+            (archive / file).write_text(content)
+            path = root / VALUE_FILES[component]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
     write_json(archive / "release.json", metadata)
     managed.mkdir(parents=True, exist_ok=True)
     for file, content in manifests.items():
@@ -85,12 +167,24 @@ def verified_snapshot(root, target, release_id):
     metadata = read_json(archive / "release.json")
     if not metadata or metadata["id"] != release_id or metadata["target"] != target:
         raise ValueError("Missing or mismatched recovery snapshot")
+    if metadata.get("delivery") == "helm" and set(
+        metadata.get("helm_values_hashes", {})
+    ) != {f"{component}-values.yaml" for component in VALUE_FILES}:
+        raise ValueError("Missing or unexpected recovery values checksums")
     for file in FILES:
         if (
             hashlib.sha256((archive / file).read_bytes()).hexdigest()
             != metadata["hashes"][file]
         ):
             raise ValueError("Recovery snapshot checksum mismatch")
+    for component in VALUE_FILES:
+        file = f"{component}-values.yaml"
+        if file in metadata.get("helm_values_hashes", {}):
+            if (
+                hashlib.sha256((archive / file).read_bytes()).hexdigest()
+                != metadata["helm_values_hashes"][file]
+            ):
+                raise ValueError("Recovery values checksum mismatch")
     return metadata
 
 
@@ -129,6 +223,74 @@ def recover_images(root, target, expected):
         raise ValueError("No previously verified healthy release is available")
     previous = verified_snapshot(root, target, candidates[0])
     replacement_id = f"recovery-{time.time_ns()}"
+    if metadata.get("delivery") == "helm":
+        values = {}
+        for component, file in VALUE_FILES.items():
+            data = yaml.safe_load((Path(root) / file).read_text())
+            prior = list(
+                yaml.safe_load_all(
+                    (
+                        Path(root)
+                        / "releases"
+                        / target
+                        / previous["id"]
+                        / f"{component}.yaml"
+                    ).read_text()
+                )
+            )
+            deployments = [
+                item for item in prior if item and item.get("kind") == "Deployment"
+            ]
+            if len(deployments) != 1:
+                raise ValueError("Recovery needs one Deployment per component")
+            deployment = deployments[0]
+            containers = [
+                item
+                for item in deployment["spec"]["template"]["spec"]["containers"]
+                if item["name"] == component
+            ]
+            if len(containers) != 1:
+                raise ValueError("Missing application container in recovery snapshot")
+            data["image"].update(image_coordinates(previous["images"][component]))
+            data["workload"]["replicaCount"] = deployment["spec"]["replicas"]
+            data["resources"] = containers[0]["resources"]
+            data.setdefault("env", {})["RELEASE_ID"] = replacement_id
+            data.setdefault("podAnnotations", {}).update(
+                {
+                    "idea-board/release-image": previous["images"][component],
+                    "idea-board/gitops-release": replacement_id,
+                }
+            )
+            values[component] = data
+        manifests = helm_manifests(
+            root,
+            values,
+            metadata["name"],
+            f"{metadata['name']}-{metadata['environment']}",
+        )
+        manifests["controls.yaml"] = (
+            destination / "manifests/controls.yaml"
+        ).read_text()
+        replacement = {
+            key: value
+            for key, value in metadata.items()
+            if key not in ("hashes", "helm_values_hashes")
+        }
+        replacement.update(
+            id=replacement_id,
+            images=previous["images"],
+            source_commit=previous["source_commit"],
+            rolled_back_from=expected,
+            recovered_image_release=previous["id"],
+        )
+        if "profile" in previous:
+            replacement["profile"] = previous["profile"]
+        result = save_release(
+            root, target, replacement, manifests, expected=expected, helm_values=values
+        )
+        status.update(rollback_pending=True, last_failed_release=expected)
+        write_json(destination / "status.json", status)
+        return result
     manifests = {file: (destination / "manifests" / file).read_text() for file in FILES}
     for component in ("backend", "frontend"):
         archive = Path(root) / "releases" / target / previous["id"]

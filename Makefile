@@ -1,3 +1,6 @@
+GITOPS_DIR ?= ../infra-helm-charts
+export GITOPS_DIR
+
 .PHONY: up down test build infra-check helm-check security-check
 up:
 	docker compose up --build --wait --wait-timeout 240
@@ -19,5 +22,5 @@ security-check:
 	.venv/bin/python scripts/security_scan.py config
 
 helm-check:
-	helm lint helm-common/nucleus -f helm-overides/idea-fe/custom-values.yaml
-	helm lint helm-common/nucleus -f helm-overides/idea-be/custom-values.yaml
+	helm lint "$(GITOPS_DIR)/helm-common/nucleus" -f "$(GITOPS_DIR)/helm-overides/idea-fe/custom-values.yaml"
+	helm lint "$(GITOPS_DIR)/helm-common/nucleus" -f "$(GITOPS_DIR)/helm-overides/idea-be/custom-values.yaml"

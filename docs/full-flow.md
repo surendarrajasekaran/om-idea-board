@@ -1,6 +1,6 @@
 # Manual cloud deployment
 
-This guide is for separate targets outside Argo ownership. The running AWS test application uses the [ECR/GitOps pipeline](gitops.md); do not run this direct Helm path against that application. The former GHCR/direct-Helm Actions workflow has been retired.
+This guide is for separate targets outside Argo ownership. It requires a sibling `infra-helm-charts` checkout (or `GITOPS_DIR`) containing the common chart and component values. The running AWS test application uses the [ECR/GitOps pipeline](gitops.md); do not run this direct Helm path against that application. The former GHCR/direct-Helm Actions workflow has been retired.
 
 The code is ready to execute; real cloud provisioning/public URL verification has not been performed on the development laptop. Do not mark those deliverables complete until the commands below succeed on each cloud.
 

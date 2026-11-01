@@ -18,6 +18,7 @@ from scripts.ai_ops import (
 )
 from scripts.gitops_monitor import wait_for_release
 from scripts.gitops_release import publish
+from scripts.deploy import GITOPS_ROOT
 from scripts.gitops_state import current, mark_healthy, recover_images, save_release
 
 
@@ -178,9 +179,14 @@ class GitOpsRecoveryTests(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("helm"), "Helm is required for GitOps rendering")
 class GitOpsPublishingTests(unittest.TestCase):
-    def test_publish_into_repository_without_chart_copies(self):
+    def repository(self, root):
+        shutil.copytree(GITOPS_ROOT / "helm-common", root / "helm-common")
+        shutil.copytree(GITOPS_ROOT / "helm-overides", root / "helm-overides")
+
+    def test_publish_updates_service_values_for_direct_helm(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            self.repository(root / "gitops")
             profile = root / "profile.json"
             profile.write_text(
                 json.dumps(
@@ -219,7 +225,20 @@ class GitOpsPublishingTests(unittest.TestCase):
             metadata = current(root / "gitops", "idea-board-aws-test")
             self.assertEqual(metadata["images"], selected)
             self.assertEqual(metadata["source_commit"], "a" * 40)
+            self.assertEqual(metadata["delivery"], "helm")
             self.assertFalse((root / "gitops/charts").exists())
+            for component, folder in [("frontend", "idea-fe"), ("backend", "idea-be")]:
+                values = yaml.safe_load(
+                    (
+                        root / f"gitops/helm-overides/{folder}/custom-values.yaml"
+                    ).read_text()
+                )
+                self.assertEqual(
+                    values["image"]["repository"] + ":" + values["image"]["tag"],
+                    selected[component],
+                )
+                self.assertEqual(values["env"]["RELEASE_ID"], "canonical-chart")
+                self.assertEqual(values["resources"]["requests"]["memory"], "128Mi")
             for component in ("frontend", "backend"):
                 path = (
                     root
@@ -241,6 +260,93 @@ class GitOpsPublishingTests(unittest.TestCase):
                     {"name": "RELEASE_ID", "value": "canonical-chart"}, container["env"]
                 )
                 self.assertEqual(container["resources"]["requests"]["memory"], "128Mi")
+
+    def test_helm_recovery_updates_values_preserving_current_security_and_secrets(self):
+        self.exercise_helm_recovery(False)
+
+    def test_helm_recovery_accepts_pre_migration_snapshots(self):
+        self.exercise_helm_recovery(True)
+
+    def exercise_helm_recovery(self, legacy):
+        from scripts.gitops_state import VALUE_FILES, helm_manifests
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.repository(root)
+            values = {
+                component: yaml.safe_load((root / file).read_text())
+                for component, file in VALUE_FILES.items()
+            }
+            for component, data in values.items():
+                data["image"].update(
+                    repository=f"example.com/board/{component}",
+                    tag="release@sha256:" + "a" * 64,
+                )
+                data["resources"]["requests"] = {"cpu": "100m", "memory": "128Mi"}
+                data.setdefault("env", {})["RELEASE_ID"] = "healthy"
+            rendered = helm_manifests(root, values, "idea-board", "idea-board-test")
+            rendered["controls.yaml"] = manifests(images("a"))["controls.yaml"]
+            metadata = {
+                "id": "healthy",
+                "name": "idea-board",
+                "environment": "test",
+                "images": images("a"),
+                "source_commit": "a" * 40,
+            }
+            save_release(
+                root, "idea-board-aws-test", metadata, rendered, helm_values=values
+            )
+            if legacy:
+                # Pre-migration snapshots have rendered manifests but no Helm-value hashes.
+                archive = root / "releases/idea-board-aws-test/healthy"
+                old = json.loads((archive / "release.json").read_text())
+                old.pop("delivery")
+                old.pop("helm_values_hashes")
+                (archive / "release.json").write_text(json.dumps(old))
+                for file in ["backend-values.yaml", "frontend-values.yaml"]:
+                    (archive / file).unlink()
+            mark_healthy(root, "idea-board-aws-test", "healthy")
+            for component, data in values.items():
+                data["image"]["tag"] = "release@sha256:" + "b" * 64
+                data["resources"]["requests"] = {"cpu": "250m", "memory": "256Mi"}
+                data["env"]["RELEASE_ID"] = "failed"
+            values["backend"]["envFrom"] = [{"secretRef": {"name": "rotated-database"}}]
+            rendered = helm_manifests(root, values, "idea-board", "idea-board-test")
+            rendered["controls.yaml"] = manifests(images("a"))["controls.yaml"]
+            save_release(
+                root,
+                "idea-board-aws-test",
+                {**metadata, "id": "failed", "images": images("b")},
+                rendered,
+                helm_values=values,
+            )
+            recovery = recover_images(root, "idea-board-aws-test", "failed")
+            self.assertEqual(recovery["images"], images("a"))
+            backend = yaml.safe_load((root / VALUE_FILES["backend"]).read_text())
+            self.assertEqual(
+                backend["envFrom"], [{"secretRef": {"name": "rotated-database"}}]
+            )
+            self.assertTrue(backend["securityContext"]["readOnlyRootFilesystem"])
+            self.assertEqual(
+                backend["resources"]["requests"], {"cpu": "100m", "memory": "128Mi"}
+            )
+            self.assertEqual(backend["image"]["tag"], "release@sha256:" + "a" * 64)
+            self.assertEqual(backend["env"]["RELEASE_ID"], recovery["id"])
+            self.assertEqual(recovery["delivery"], "helm")
+            self.assertEqual(
+                (
+                    root / "environments/idea-board-aws-test/manifests/controls.yaml"
+                ).read_text(),
+                rendered["controls.yaml"],
+            )
+            from scripts.gitops_state import verified_snapshot
+
+            if not legacy:
+                (
+                    root / "releases/idea-board-aws-test/healthy/backend-values.yaml"
+                ).write_text("tampered")
+                with self.assertRaisesRegex(ValueError, "values checksum"):
+                    verified_snapshot(root, "idea-board-aws-test", "healthy")
 
 
 class ProviderAndObservationTests(unittest.TestCase):

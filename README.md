@@ -11,16 +11,16 @@ flowchart LR
   Source[Application main push] --> CI[Tests and security checks]
   CI --> AI[Gemini profile plus local policy]
   AI --> ECR[Build and scan immutable ECR images]
-  ECR --> Render[Render canonical nucleus chart]
+  ECR --> Render[Update image and resource Helm values]
   Render --> Git[infra-helm-charts desired state]
-  Git --> Argo[Argo CD inside private EKS]
+  Git --> Argo[Argo CD renders Helm inside private EKS]
   Argo --> App[Frontend and API]
   App --> Health[Version, readiness and create/read checks]
   Health --> Decision[Gemini assessment plus hard gates]
   Decision -->|recovery needed| Git
 ```
 
-The application repository owns the chart in `helm-common/nucleus` and component values under `helm-overides/`. The [GitOps repository](https://github.com/surendarrajasekaran/infra-helm-charts) holds rendered manifests, release snapshots and the health monitor. Argo CD consumes those manifests. Each release records the source commit and immutable image digests.
+The [GitOps repository](https://github.com/surendarrajasekaran/infra-helm-charts) owns `helm-common/nucleus` and `helm-overides/idea-fe|idea-be/custom-values.yaml`. CI updates each component’s immutable image tag/digest and validated resources in those values files. Argo CD renders the shared chart twice using separate Helm release names, producing separate frontend/backend Deployments and Services. Namespace security controls form a third source in the same application. Rendered snapshots are retained for validation and recovery; Argo consumes the Helm values directly.
 
 The frontend proxies `/api` to the backend; PostgreSQL remains private. The public test board is anonymous and uses HTTP, so use synthetic data.
 
@@ -31,10 +31,10 @@ The frontend proxies `/api` to the backend; PostgreSQL remains private. The publ
 | `frontend/`, `backend/` | Application, Dockerfiles and tests |
 | `docker-compose.yml` | Local database, migration, API and frontend |
 | `infra/` | AWS/GCP network, Kubernetes and PostgreSQL modules; AWS ECR/OIDC/state bootstrap |
-| `helm-common/nucleus/` | Single canonical, unchanged nucleus 1.1.0 chart |
-| `helm-overides/idea-fe/`, `helm-overides/idea-be/`, `deploy/clouds/` | Component values and cloud Service settings |
+| `deploy/gitops/chart-source.json` | Reviewed GitOps revision used for CI chart-contract checks |
+| `deploy/clouds/` | Cloud Service settings |
 | `deploy/argocd/`, `deploy/gitops/` | Controller locks/configuration and Git host verification |
-| `scripts/gitops_release.py` | Render source chart and publish desired-state snapshots |
+| `scripts/gitops_release.py` | Update GitOps Helm values, preview rendering and save recovery snapshots |
 | `scripts/gitops_monitor.py`, `scripts/gitops_state.py` | HTTP assessment and guarded Git recovery |
 | `scripts/ai_ops.py` | Schema-validated resource proposals and health advice |
 | `scripts/bootstrap_gitops.py`, `scripts/private_eks.py` | Private cluster bootstrap and SSM access |
@@ -66,7 +66,7 @@ docker compose up --build --wait --wait-timeout 240
 
 Open [localhost:8080](http://localhost:8080). To stop the stack, run `docker compose down`; its PostgreSQL volume preserves local data.
 
-For local checks, install Python 3.12, Node.js 22 and Helm 3:
+For local checks, install Python 3.12, Node.js 22 and Helm 3. Clone `infra-helm-charts` beside this checkout, or export `GITOPS_DIR` with its path. CI automatically checks out the reviewed revision from `deploy/gitops/chart-source.json`:
 
 ```sh
 python3 -m venv .venv

@@ -13,6 +13,7 @@ from scripts.deploy import (
     CHART,
     Deployment,
     ROOT,
+    GITOPS_ROOT,
     VALUES,
     image_values,
     overrides,
@@ -164,7 +165,9 @@ class DeploymentPolicyTests(unittest.TestCase):
 @unittest.skipUnless(shutil.which("helm"), "Helm is required for chart contract tests")
 class CommonChartTests(unittest.TestCase):
     def test_supplied_chart_is_unchanged(self):
-        manifest = json.loads((ROOT / "helm-common/nucleus-source.json").read_text())
+        manifest = json.loads(
+            (GITOPS_ROOT / "helm-common/nucleus-source.json").read_text()
+        )
         for relative, digest in manifest["sha256"].items():
             self.assertEqual(
                 hashlib.sha256((CHART / relative).read_bytes()).hexdigest(),

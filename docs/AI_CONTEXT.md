@@ -5,8 +5,9 @@ Updated November 1, 2026. This file records current project state; historical te
 ## Repositories and ownership
 
 - Source: `surendarrajasekaran/om-idea-board`; GitOps desired state: `surendarrajasekaran/infra-helm-charts`.
-- Source `helm-common/nucleus` is the single canonical, unchanged user-supplied nucleus 1.1.0 chart. `helm-common/nucleus-source.json` records its hashes; component values are in `helm-overides/idea-fe` and `helm-overides/idea-be`.
-- `gitops_release.py` renders that source commit's chart/values. GitOps holds generated `environments/<target>/manifests`, immutable `releases/<target>/<id>` snapshots, bootstrap definitions and reviewed monitor helpers. It needs no chart/value copies.
+- GitOps `helm-common/nucleus` is the single canonical unchanged nucleus 1.1.0 chart, with `helm-common/nucleus-source.json` hashes. GitOps values are `helm-overides/idea-fe/custom-values.yaml` and `helm-overides/idea-be/custom-values.yaml`.
+- `gitops_release.py` updates the current GitOps values with immutable images/resources/release identity, previews Helm rendering and records checksummed rendered/value snapshots. Argo renders the chart twice using separate release names, plus a directory source including only namespace controls. Rendered application files are evidence/recovery inputs, not Argo's application source.
+- Source CI checks out the reviewed GitOps revision in `deploy/gitops/chart-source.json`; local checks use a sibling checkout or `GITOPS_DIR`. There is no duplicate chart in the application repository.
 - Argo CD owns the AWS test application's rollout and Git-based recovery. The old GHCR/direct-Helm Actions workflow is retired. Manual `run_platform.py`/`deploy.py` remain for separate, non-Argo targets and shared rendering/bootstrap utilities.
 - Both cloud Terraform implementations remain part of the assignment. AWS is deployed; GCP deployment and its second public URL are still outstanding.
 
@@ -26,7 +27,7 @@ The user selected Gemini only, model `gemini-3.5-flash-lite`. Each repository ha
 
 Gemini uses a fixed HTTPS endpoint, an unredirected key header, native JSON-schema output, local validation, a 30-second timeout and a 1,200-token output cap. Test policy permits one replica and at most 250m requested CPU per component; production requires at least two replicas. Provider/schema failures explicitly fall back to policy, or fail when live AI is required. The manual AI check tests a replacement key/model with one proposal. A free-tier billing project is required for free quota; a key/model name does not establish billing tier.
 
-The GitOps monitor verifies both component versions, 20 readiness requests and a new-release create/read operation. It has HTTP-only evidence; it does not observe CPU, memory, pod restarts or logs. Hard gates force recovery when failed even if AI recommends keeping a release. Recovery commits previous verified images/resources, retains current security/Secret/CA references, validates snapshot hashes, rejects stale pushes and guards pending recovery. No database/data/infrastructure rollback occurs. Healthy unchanged releases skip AI calls.
+The GitOps monitor verifies both component versions, 20 readiness requests and a new-release create/read operation. It has HTTP-only evidence; it does not observe CPU, memory, pod restarts or logs. Hard gates force recovery when failed even if AI recommends keeping a release. Recovery updates current Helm values with previous verified images/resources, retains current security/Secret/CA references, re-renders the current chart, validates rendered/value snapshot hashes, rejects stale pushes and guards pending recovery. Pre-migration manifest-only snapshots are also supported. No database/data/infrastructure rollback occurs. Healthy unchanged releases skip AI calls.
 
 ## State, credentials and tools
 

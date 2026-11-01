@@ -113,7 +113,10 @@ def monitor(root, target, output, convergence_timeout=600, *, display=False):
     if display:
         show_report(report)
     if changed:
-        subprocess.run(["git", "add", "environments", "releases"], cwd=root, check=True)
+        paths = ["environments", "releases"]
+        if (root / "helm-overides").exists():
+            paths.append("helm-overides")
+        subprocess.run(["git", "add", *paths], cwd=root, check=True)
         subprocess.run(
             [
                 "git",

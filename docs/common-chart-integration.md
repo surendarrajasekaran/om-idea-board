@@ -1,6 +1,6 @@
 # Supplied nucleus chart integration
 
-`helm-common/nucleus` is an unchanged copy of the user-supplied nucleus 1.1.0 chart. `helm-common/nucleus-source.json` records SHA-256 checksums for its Chart.yaml, defaults, README, and templates. Contract tests verify every copied file. This is the single canonical chart copy. The GitOps publisher renders it and the source component values at the release source commit, then publishes only generated manifests and recovery metadata. Optional upstream templates remain intact to preserve the reusable chart contract and recorded hashes. There are no replacement application Deployment templates.
+In `infra-helm-charts`, `helm-common/nucleus` is an unchanged copy of the user-supplied nucleus 1.1.0 chart. `helm-common/nucleus-source.json` records SHA-256 checksums for its Chart.yaml, defaults, README, and templates. Contract tests verify every copied file. This is the single canonical chart copy. The application publisher updates the component values in that repository and previews the Helm render. Argo CD renders the chart directly from those values; checksummed rendered/value snapshots support recovery. Source CI loads a pinned GitOps revision rather than a duplicate chart. Optional upstream templates remain intact to preserve the reusable chart contract and recorded hashes. There are no replacement application Deployment templates.
 
 | Component | Custom values | Release/Service name | Port | Exposure |
 | --- | --- | --- | --- | --- |
@@ -39,6 +39,8 @@ After rollout it waits for public load-balancer readiness, measures twenty HTTP 
 Sanitized `deployment.json` and `health.json` include target, immutable images, profile, public URL, previous revisions, final status, and recovery result. They never contain database/registry credentials. Secrets are not automatically deleted during recovery, and application rollback never reverts database data or schema. Do not introduce destructive migrations without a versioned expand/contract process.
 
 ## Rendering without cloud access
+
+Clone `infra-helm-charts` beside the application repository, or set `GITOPS_DIR` to its path.
 
 ```sh
 .venv/bin/python scripts/ai_ops.py --output artifacts/profile.json plan \

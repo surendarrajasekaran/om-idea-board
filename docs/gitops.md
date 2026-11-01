@@ -7,8 +7,8 @@ flowchart LR
   Developer[Developer pushes application main] --> CI[Tests and validated resource profile]
   CI --> Images[Build amd64 images and scan exact digests]
   Images --> ECR[Private immutable ECR repositories]
-  Images --> Git[Commit rendered chart manifests to infra-helm-charts]
-  Git --> Argo[Argo CD inside private EKS]
+  Images --> Git[Commit image and resource Helm values]
+  Git --> Argo[Argo CD renders shared Helm chart]
   ECR --> Pods[Frontend and backend]
   Argo --> Pods
   Pods --> Health[Release identity and HTTP health checks]
@@ -23,7 +23,11 @@ flowchart LR
 
 After tests, the pipeline uses GitHub OIDC to assume the ECR publisher role. That role can publish only the frontend/backend repositories for this stack. Images have unique immutable tags, captured SHA-256 digests, SBOM/provenance and a fixable HIGH/CRITICAL image scan gate. A dedicated repository deploy key publishes rendered manifests and release metadata to the GitOps repository. No database passwords, CA Secrets or registry credentials enter Git.
 
-The single canonical nucleus 1.1.0 chart and provenance are in the application source repository under `helm-common`; component values are in `helm-overides/idea-fe` and `helm-overides/idea-be`. The publisher renders the chart and values from its exact source commit, plus shared namespace controls. The GitOps repository stores generated manifests and recovery snapshots without duplicate charts or values. Relevant source chart/value changes trigger the release workflow. Frontend values are `helm-overides/idea-fe/custom-values.yaml`; backend values are `helm-overides/idea-be/custom-values.yaml`. At release time the renderer overlays the immutable image tag/digest and validated resource settings on each component’s defaults, then publishes the effective manifests to GitOps. The two components remain separate Kubernetes Deployments and Services. Argo CD applies those manifests with controls first, then backend, then frontend. Annotation tracking keeps Argo ownership separate from Helm's existing selector labels. The AppProject allows only approved namespaced resources in `idea-board-test`; it cannot deploy Secrets or cluster resources. Namespace creation and database Secrets are bootstrap responsibilities.
+The chart and values live in `infra-helm-charts`: `helm-common/nucleus`, `helm-common/nucleus-source.json`, `helm-overides/idea-fe/custom-values.yaml` and `helm-overides/idea-be/custom-values.yaml`. The chart remains the unchanged user-supplied nucleus 1.1.0. CI overlays immutable image tags/digests, validated resources and release identity onto the current component values, preserves their security/Secret settings, previews the exact Helm render and commits both values files plus checksummed snapshots.
+
+Argo CD has three related sources: the common chart rendered as `idea-board-backend`, the same chart rendered as `idea-board-frontend`, and namespace security controls from `environments/<target>/manifests/controls.yaml`. Helm test hooks are skipped. Argo applies controls first, backend next and frontend last. The other rendered files under `manifests` are recovery/evidence inputs and are excluded from Argo’s directory source. Annotation tracking preserves existing Helm selector labels. The AppProject permits only approved namespaced resources, excluding Secrets and cluster resources; namespace and credential/CA Secrets remain bootstrap responsibilities.
+
+Application CI fetches the pinned GitOps revision in `deploy/gitops/chart-source.json` for chart-contract checks, without duplicating the chart in the source repository. Local checks use a sibling GitOps checkout or `GITOPS_DIR`. GitOps chart/value changes have their own validation workflow.
 
 The old GHCR/direct-Helm Actions workflow has been removed. Do not run `deploy.py` or the direct `run_platform.py` deployment against this Argo-managed application. Infrastructure remains owned by Terraform, and the Argo controller installation remains owned by its separate Helm release.
 
@@ -54,7 +58,7 @@ The GitOps repository's health workflow runs on new release metadata, manual dis
 
 HTTP failure rate above 5%, p95 above 1500 ms, failed version convergence or a failed functional smoke forces recovery even if the model recommends keeping the release. A model may recommend an earlier rollback within that guardrail. Recovery needs a previously verified healthy snapshot: the first failed installation requires operator action. Snapshot checksums, expected-release checks and normal fast-forward Git pushes reject corruption or stale observations. A pending recovery blocks another automatic rollback until health is verified or an operator intervenes.
 
-Recovery creates a new Git desired state using the previous healthy images, replicas and application resource requests/limits. It preserves current network/security controls, database/TLS/CA Secret references and other pod hardening. It does not reverse database migrations, restore data or destroy infrastructure. Schema migrations must therefore remain compatible with the previous application version. Argo CD reconciles the recovery commit; the next monitor must verify it before calling recovery successful.
+Recovery updates the same Helm values with previous verified images, replicas and application resource requests/limits, re-renders the current chart, and saves a new checksummed recovery snapshot. Older manifest-only snapshots remain valid recovery candidates. It preserves current network/security controls, database/TLS/CA Secret references and other pod hardening. It does not reverse database migrations, restore data or destroy infrastructure. Schema migrations must therefore remain compatible with the previous application version. Argo CD reconciles the recovery commit; the next monitor must verify it before calling recovery successful.
 
 ## Provisioning and private administration
 

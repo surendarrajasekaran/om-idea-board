@@ -28,10 +28,13 @@ except ImportError:
     from workload_policy import namespace_resources
 
 ROOT = Path(__file__).resolve().parents[1]
-CHART = ROOT / "helm-common/nucleus"
+GITOPS_ROOT = Path(
+    os.environ.get("GITOPS_DIR", ROOT.parent / "infra-helm-charts")
+).resolve()
+CHART = GITOPS_ROOT / "helm-common/nucleus"
 VALUES = {
-    "frontend": ROOT / "helm-overides/idea-fe/custom-values.yaml",
-    "backend": ROOT / "helm-overides/idea-be/custom-values.yaml",
+    "frontend": GITOPS_ROOT / "helm-overides/idea-fe/custom-values.yaml",
+    "backend": GITOPS_ROOT / "helm-overides/idea-be/custom-values.yaml",
 }
 RELEASES = ["idea-board-backend", "idea-board-frontend"]
 
@@ -313,8 +316,16 @@ class Deployment:
         raise RuntimeError("Timed out waiting for the public load balancer")
 
 
-def deploy(args):
-    chart = CHART
+def deploy(args, *, gitops_dir=None):
+    chart = Path(gitops_dir) / "helm-common/nucleus" if gitops_dir else CHART
+    values_files = (
+        {
+            key: Path(gitops_dir) / path.relative_to(GITOPS_ROOT)
+            for key, path in VALUES.items()
+        }
+        if gitops_dir
+        else VALUES
+    )
     os.umask(0o077)
     name = getattr(args, "name", "idea-board")
     tls_secret = getattr(args, "tls_secret", "")
@@ -364,7 +375,7 @@ def deploy(args):
             values["envFrom"] = [{"secretRef": {"name": f"{name}-database"}}]
             # Helm evaluates this existing init container value through tpl.
             values["initContainers"] = copy.deepcopy(
-                yaml.safe_load(VALUES["backend"].read_text())["initContainers"]
+                yaml.safe_load(values_files["backend"].read_text())["initContainers"]
             )
             values["initContainers"][0]["envFrom"] = [
                 {"secretRef": {"name": f"{name}-migration"}}
@@ -373,7 +384,7 @@ def deploy(args):
             values["env"] = {"BACKEND_HOST": f"{name}-backend"}
             values["service"] = {"annotations": {"idea-board/public-host": public_host}}
             if tls_secret:
-                base = yaml.safe_load(VALUES["frontend"].read_text())
+                base = yaml.safe_load(values_files["frontend"].read_text())
                 values["env"]["TLS_LISTEN"] = (
                     "listen 8443 ssl; ssl_certificate /etc/nginx/tls/tls.crt; ssl_certificate_key /etc/nginx/tls/tls.key;"
                 )
@@ -423,7 +434,7 @@ def deploy(args):
                 f"{name}-{component}",
                 str(chart),
                 "-f",
-                str(VALUES[component]),
+                str(values_files[component]),
             ]
             if component == "frontend":
                 command += ["-f", str(ROOT / f"deploy/clouds/{args.cloud}.yaml")]
