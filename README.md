@@ -8,7 +8,7 @@ A React frontend, FastAPI backend and PostgreSQL database. Application delivery 
 | --- | --- |
 | **om-idea-board** — this repo | Frontend/backend, tests, CI and AI/GitOps helpers |
 | [infra-helm-charts](https://github.com/surendarrajasekaran/infra-helm-charts) | Helm charts, component values, parent/child Argo Applications, health workflow and rollback records |
-| [terraform-infrastructure](https://github.com/surendarrajasekaran/terraform-infrastructure) — private | Reusable AWS/GCP modules, cloud onboarding, state bootstrap and Argo controller installation |
+| [terraform-infrastructure](https://github.com/surendarrajasekaran/terraform-infrastructure) — private | Reusable AWS/GCP modules, cloud onboarding and Argo controller installation |
 
 There is no `docs`, `deploy` or `infra` directory here. The actual running AWS inputs and backend settings are versioned in the private infrastructure repo; its README has the init/plan/apply commands. GitOps instructions are in its README.
 
@@ -85,8 +85,10 @@ Gemini receives a generic resource goal or numeric HTTP aggregates. The response
 
 1. Open **Actions → Check live AI provider → Run workflow** on `main`.
 2. Enter a resource goal. This workflow plans only; it does not deploy.
-3. Show **AI resource plan** in the run summary and its step logs: goal, provider/model, accepted replicas/CPU/memory and rationale. `live-ai` confirms a live accepted response.
+3. Show **AI resource plan** in the run summary: goal, provider/model and accepted replicas/CPU/memory. The **AI detailed decision explanation** covers the goal, replica/CPU/memory choices, alternatives, assumptions, risks, cost impact, verification and unsupported requests. The planner asks for approximately 500–750 words; actual length varies by model. `live-ai` confirms an accepted live response. Provider response ID, reported model, token usage and request duration are shown when available. Separate **Pipeline policy checks** come from the code.
 4. For the full demo, run a release and show the GitOps values commit, all three Argo Applications and the subsequent **AI health assessment** summary in GitOps Actions.
+
+Example goal: `Cost-sensitive test environment for a small team. Keep one replica per service and at most 250m CPU. Request 256Mi memory per service. Explain the sizing trade-offs, availability limitations, assumptions and post-deployment checks.` Download the `live-ai-check` artifact for the complete structured response. The same detailed planning report appears in the release workflow. Both services share one profile; the planner changes replicas and CPU/memory requests within policy. Fixed container limits, init containers and Terraform infrastructure are unchanged. Resource requests alone do not reduce the bill of the existing fixed-size worker. Fallbacks are labeled and do not receive a fabricated AI explanation. Planning uses one call with a 3,000-output-token cap and a 45-second timeout; there are no automatic retries.
 
 The monitor checks both release identities, 20 readiness requests and new-release create/read. It observes HTTP only. Hard gates can force recovery even if Gemini says `keep`. Recovery restores verified images/resources through Git and preserves current security and Secret references. It never rolls back database schema, data or infrastructure. A failed first installation has no known-good recovery target.
 
