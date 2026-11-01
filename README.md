@@ -10,7 +10,7 @@ A React frontend, FastAPI backend and PostgreSQL database. Application delivery 
 | [infra-helm-charts](https://github.com/surendarrajasekaran/infra-helm-charts) | Helm charts, component values, parent/child Argo Applications, health workflow and rollback records |
 | [terraform-infrastructure](https://github.com/surendarrajasekaran/terraform-infrastructure) — private | Reusable AWS/GCP modules, cloud onboarding, state bootstrap and Argo controller installation |
 
-There is no `docs`, `deploy` or `infra` directory here. Terraform instructions are in the infrastructure repo's README. GitOps instructions are in its README.
+There is no `docs`, `deploy` or `infra` directory here. The actual running AWS inputs and backend settings are versioned in the private infrastructure repo; its README has the init/plan/apply commands. GitOps instructions are in its README.
 
 ## Run locally
 
@@ -54,9 +54,9 @@ CI updates `helm-overides/idea-fe/custom-values.yaml` and `helm-overides/idea-be
 
 ## How is Argo installed?
 
-Terraform provisions the network, Kubernetes, database, ECR and AWS publisher permissions. **Argo itself is installed with Helm, not Terraform**, by `apps/onboard/aws/bootstrap_argocd.py` in `terraform-infrastructure`, through the private EKS connection.
+Terraform provisions the network, Kubernetes, database, ECR and publisher permissions. It also manages the Argo controller through `modules/aws/argocd`, sourced by `apps/onboard/aws` in `terraform-infrastructure`. Terraform's Helm provider uses EKS connection data and short-lived IAM authentication. There is no installer script or separate manual Helm installation.
 
-That one-time platform bootstrap installs only Helm release `argocd` and applies the parent Application/projects from GitOps. Argo then manages this tree:
+Terraform manages Helm release `argocd`. The parent Application/projects live in GitOps. Argo then manages this tree:
 
 ```text
 idea-board-controller
