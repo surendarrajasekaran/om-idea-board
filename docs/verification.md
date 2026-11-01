@@ -38,6 +38,22 @@ The private administration session expired during a controller Helm update, leav
 
 The further cost change that scales the unused ApplicationSet controller to zero is applied after renewed AWS SSO access. The chart ignores an `applicationSet.enabled` setting; the corrected configuration uses `replicas: 0` and was render-verified.
 
+## November 1 automated delivery accepted
+
+The full hosted delivery path is now observed, including the corrected federation trust:
+
+| Evidence | Result |
+| --- | --- |
+| [Latest code CI](https://github.com/surendarrajasekaran/om-idea-board/actions/runs/41276404191) | Passed: backend, frontend, Compose, both-cloud configuration scan and 11 Terraform cases |
+| [ECR and GitOps release](https://github.com/surendarrajasekaran/om-idea-board/actions/runs/41275785592) | Attempt 2 passed: exact OIDC authentication, both Linux amd64 builds/scans and GitOps publication |
+| GitOps release commit | `0015f83`; application source commit `f2f202a` (the subsequent `4f1b503` changes infrastructure trust/tests/docs only) |
+| Argo CD | Synced and Healthy; public frontend/backend identities match the CI release |
+| [New-release health workflow](https://github.com/surendarrajasekaran/infra-helm-charts/actions/runs/41276535583) | Passed with 20 requests, zero failures, p95 153.21 ms, and a real create/read smoke |
+| Healthy-state commit | `6408d3e` records the CI release as healthy, with no pending rollback |
+| Unused ApplicationSet controller | Zero replicas; four Argo controller/cache/server pods remain |
+
+Current release: `f2f202a189c020d222b335c25db52eb2c82f5008-41275785592-2`. This is a successful CI → private ECR → separate GitOps repository → Argo CD → hosted health check execution. The latency figure is a small GitHub-runner smoke window, not a load benchmark. Its health source is explicitly `policy-fallback`; a live NVIDIA/Groq/OpenAI request remains unverified until a provider API key is configured. The scheduled health workflow is now published and enabled.
+
 ## October 31 platform/security verification
 
 These results cover local changes after `6349e55`, not a new published GitHub run or cloud deployment. Detailed scope, exceptions and remaining risks are in [the platform review](platform-review.md).
@@ -107,11 +123,11 @@ The local preview uses Docker Compose at http://localhost:8080. Test ideas remai
 | --- | --- | --- |
 | Environment | test / mit-qa / us-west-2 | Pending |
 | Public application URL | [AWS test](http://af0d4388f01a74cebb0d087102ac80e7-5adda6a4d01432b5.elb.us-west-2.amazonaws.com) | Pending |
-| Frontend image digest | Pending | Pending |
-| Backend image digest | Pending | Pending |
+| Frontend image digest | sha256:7d4e5480ef3aa6d5c4f4f8fe3574a1d178f9d11aee1cfa578c1df31ea99ed54e | Pending |
+| Backend image digest | sha256:af21eb50ca9a2e94b4befde5b3b2a97077df258691a5f8723320a66761517beb | Pending |
 | Common chart version | nucleus 1.1.0 vendored unchanged | nucleus 1.1.0 vendored unchanged |
-| Infrastructure workflow run | Pending | Pending |
-| Release/deployment workflow run | Pending | Pending |
+| Infrastructure provisioning | Authenticated Terraform CLI applies succeeded | Pending |
+| Release/deployment workflow run | [Passed](https://github.com/surendarrajasekaran/om-idea-board/actions/runs/41275785592) | Pending |
 | Smoke test | Public create/read passed | Pending |
 | Health report | Keep, policy-fallback; HTTP-only | Pending |
 | Rollback exercise | Verified Git recovery and public create/read; baseline data persisted | Pending |

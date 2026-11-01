@@ -11,6 +11,10 @@ The October 31 platform/security and GitOps changes supersede baseline commit `6
 
 The failed test release `rollback-drill-20261031` was recovered through Git commit `bd79b81` and Argo reconciliation. The healthy recovery is `recovery-1793509010408156000`; commit `26d6c69` records verified health and clears pending recovery. Public release identities and create/read passed, and the baseline verification idea persisted. The test used a 60-second convergence override and deterministic fallback, not a live model. GitHub workflow authorization and AWS SSO renewal subsequently completed. Both repositories/workflows are published, and the ApplicationSet controller zero-replica optimization was applied.
 
+### November 1 automated pipeline accepted
+
+Both repositories are published. Code CI `41276404191` passed (including 11 Terraform cases), ECR/GitOps release `41275785592` attempt 2 passed, and the independently triggered new-release health workflow `41276535583` passed. Current healthy release: `f2f202a189c020d222b335c25db52eb2c82f5008-41275785592-2`, GitOps release commit `0015f83`, health commit `6408d3e`. Argo is Synced/Healthy, frontend/backend public identities match, and hosted create/read succeeded. The unused ApplicationSet controller is scaled to zero. Health remains explicitly policy-fallback; no live provider key has been configured. Terraform uses the repository's exact immutable OIDC prefix from GitHub settings, with exact aws-test environment and STS audience matching. See verification for links, digests, initial failures and subsequent fixes.
+
 ### AWS test GitOps continuation
 
 - Source repository: `surendarrajasekaran/om-idea-board`; deployment repository: `surendarrajasekaran/infra-helm-charts`.
