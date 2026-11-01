@@ -68,7 +68,8 @@ class GeminiTests(unittest.TestCase):
         self.assertEqual(
             body["generationConfig"]["responseMimeType"], "application/json"
         )
-        self.assertEqual(body["generationConfig"]["candidateCount"], 1)
+        self.assertNotIn("candidateCount", body["generationConfig"])
+        self.assertNotIn("temperature", body["generationConfig"])
         self.assertEqual(body["generationConfig"]["maxOutputTokens"], 1200)
         self.assertEqual(call.call_args.kwargs["timeout"], 30)
         redirected = urllib.request.HTTPRedirectHandler().redirect_request(

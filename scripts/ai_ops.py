@@ -105,8 +105,6 @@ def ask_model(task, payload, schema):
             "systemInstruction": {"parts": [{"text": body["instructions"]}]},
             "contents": [{"role": "user", "parts": [{"text": json.dumps(payload)}]}],
             "generationConfig": {
-                "candidateCount": 1,
-                "temperature": 0,
                 "maxOutputTokens": 1200,
                 "responseMimeType": "application/json",
                 "responseJsonSchema": schema,
