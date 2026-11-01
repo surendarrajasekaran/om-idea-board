@@ -49,7 +49,7 @@ jobs:
           args=()
           if [ "$REQUIRE_AI" = "true" ]; then args+=(--require-ai); fi
           python scripts/ai_ops.py "${args[@]}" --show-report --output artifacts/profile.json plan --environment test --goal "$GOAL"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with: { name: gitops-profile, path: artifacts/profile.json }
   images:
     needs: [verify, profile]
@@ -101,7 +101,7 @@ jobs:
           TRIVY_USERNAME=AWS TRIVY_PASSWORD="$(aws ecr get-login-password --region "$REGION")" python scripts/security_scan.py image "$IMAGE"
           mkdir -p artifacts
           printf '%s\n' "$IMAGE" > "artifacts/$SERVICE-image.txt"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           {
             name: "gitops-${{ matrix.service }}-image",
