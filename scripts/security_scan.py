@@ -112,7 +112,7 @@ def _scan(kind, reference, scratch):
                 source = ROOT / relative
                 if not relative or not source.is_file() or source.is_symlink():
                     continue
-                if relative.startswith("deploy/charts/"):
+                if relative.startswith("helm-common/nucleus/"):
                     continue
                 if source.name != "Dockerfile" and source.suffix not in {
                     ".tf",

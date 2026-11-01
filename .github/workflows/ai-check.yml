@@ -1,6 +1,11 @@
 name: Check live AI provider
 on:
   workflow_dispatch:
+    inputs:
+      goal:
+        description: Resource goal to send to the AI planner
+        required: true
+        default: Cost-sensitive test environment for a small team
 permissions:
   contents: read
 jobs:
@@ -18,8 +23,9 @@ jobs:
           AI_MODEL: ${{ vars.AI_MODEL || 'gemini-3.5-flash-lite' }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOAL: ${{ inputs.goal }}
         run: |
-          python scripts/ai_ops.py --require-ai --output artifacts/ai-check.json plan \
-            --environment test --goal 'Cost-sensitive test environment for a small team'
+          python scripts/ai_ops.py --require-ai --show-report --output artifacts/ai-check.json plan \
+            --environment test --goal "$GOAL"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: live-ai-check, path: artifacts/ai-check.json }

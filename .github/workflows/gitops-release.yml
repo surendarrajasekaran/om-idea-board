@@ -6,9 +6,8 @@ on:
       - backend/**
       - frontend/**
       - scripts/**
-      - deploy/charts/**
-      - deploy/frontend/**
-      - deploy/backend/**
+      - helm-common/**
+      - helm-overides/**
       - deploy/clouds/**
       - .github/workflows/gitops-release.yml
   workflow_dispatch:
@@ -49,7 +48,7 @@ jobs:
         run: |
           args=()
           if [ "$REQUIRE_AI" = "true" ]; then args+=(--require-ai); fi
-          python scripts/ai_ops.py "${args[@]}" --output artifacts/profile.json plan --environment test --goal "$GOAL"
+          python scripts/ai_ops.py "${args[@]}" --show-report --output artifacts/profile.json plan --environment test --goal "$GOAL"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with: { name: gitops-profile, path: artifacts/profile.json }
   images:

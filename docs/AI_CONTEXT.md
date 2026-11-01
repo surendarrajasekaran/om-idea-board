@@ -5,7 +5,7 @@ Updated November 1, 2026. This file records current project state; historical te
 ## Repositories and ownership
 
 - Source: `surendarrajasekaran/om-idea-board`; GitOps desired state: `surendarrajasekaran/infra-helm-charts`.
-- Source `deploy/charts/nucleus` is the single canonical, unchanged user-supplied nucleus 1.1.0 chart. `deploy/charts/nucleus-source.json` records its hashes; component values are in `deploy/frontend` and `deploy/backend`.
+- Source `helm-common/nucleus` is the single canonical, unchanged user-supplied nucleus 1.1.0 chart. `helm-common/nucleus-source.json` records its hashes; component values are in `helm-overides/idea-fe` and `helm-overides/idea-be`.
 - `gitops_release.py` renders that source commit's chart/values. GitOps holds generated `environments/<target>/manifests`, immutable `releases/<target>/<id>` snapshots, bootstrap definitions and reviewed monitor helpers. It needs no chart/value copies.
 - Argo CD owns the AWS test application's rollout and Git-based recovery. The old GHCR/direct-Helm Actions workflow is retired. Manual `run_platform.py`/`deploy.py` remain for separate, non-Argo targets and shared rendering/bootstrap utilities.
 - Both cloud Terraform implementations remain part of the assignment. AWS is deployed; GCP deployment and its second public URL are still outstanding.

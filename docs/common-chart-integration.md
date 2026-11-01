@@ -1,11 +1,11 @@
 # Supplied nucleus chart integration
 
-`deploy/charts/nucleus` is an unchanged copy of the user-supplied nucleus 1.1.0 chart. `deploy/charts/nucleus-source.json` records SHA-256 checksums for its Chart.yaml, defaults, README, and templates. Contract tests verify every copied file. This is the single canonical chart copy. The GitOps publisher renders it and the source component values at the release source commit, then publishes only generated manifests and recovery metadata. Optional upstream templates remain intact to preserve the reusable chart contract and recorded hashes. There are no replacement application Deployment templates.
+`helm-common/nucleus` is an unchanged copy of the user-supplied nucleus 1.1.0 chart. `helm-common/nucleus-source.json` records SHA-256 checksums for its Chart.yaml, defaults, README, and templates. Contract tests verify every copied file. This is the single canonical chart copy. The GitOps publisher renders it and the source component values at the release source commit, then publishes only generated manifests and recovery metadata. Optional upstream templates remain intact to preserve the reusable chart contract and recorded hashes. There are no replacement application Deployment templates.
 
 | Component | Custom values | Release/Service name | Port | Exposure |
 | --- | --- | --- | --- | --- |
-| Frontend | `deploy/frontend/custom-values.yaml` | `idea-board-frontend` | 8080 / Service 80 | LoadBalancer |
-| Backend | `deploy/backend/custom-values.yaml` | `idea-board-backend` | 8000 | ClusterIP |
+| Frontend | `helm-overides/idea-fe/custom-values.yaml` | `idea-board-frontend` | 8080 / Service 80 | LoadBalancer |
+| Backend | `helm-overides/idea-be/custom-values.yaml` | `idea-board-backend` | 8000 | ClusterIP |
 
 The namespace is `<name>-<environment>`, including `idea-board-test` for the current AWS target. The frontend's `BACKEND_HOST` matches the fixed backend Service name. The same release names work on different clusters; environments use different namespaces.
 

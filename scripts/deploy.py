@@ -28,7 +28,11 @@ except ImportError:
     from workload_policy import namespace_resources
 
 ROOT = Path(__file__).resolve().parents[1]
-CHART = ROOT / "deploy/charts/nucleus"
+CHART = ROOT / "helm-common/nucleus"
+VALUES = {
+    "frontend": ROOT / "helm-overides/idea-fe/custom-values.yaml",
+    "backend": ROOT / "helm-overides/idea-be/custom-values.yaml",
+}
 RELEASES = ["idea-board-backend", "idea-board-frontend"]
 
 
@@ -210,7 +214,7 @@ class Deployment:
             "--history-max",
             "20",
             "-f",
-            str(ROOT / f"deploy/{component}/custom-values.yaml"),
+            str(VALUES[component]),
         ]
         if component == "frontend":
             args.extend(["-f", str(ROOT / f"deploy/clouds/{cloud}.yaml")])
@@ -311,7 +315,6 @@ class Deployment:
 
 def deploy(args):
     chart = CHART
-    values_root = ROOT / "deploy"
     os.umask(0o077)
     name = getattr(args, "name", "idea-board")
     tls_secret = getattr(args, "tls_secret", "")
@@ -361,9 +364,7 @@ def deploy(args):
             values["envFrom"] = [{"secretRef": {"name": f"{name}-database"}}]
             # Helm evaluates this existing init container value through tpl.
             values["initContainers"] = copy.deepcopy(
-                yaml.safe_load(
-                    (values_root / "backend/custom-values.yaml").read_text()
-                )["initContainers"]
+                yaml.safe_load(VALUES["backend"].read_text())["initContainers"]
             )
             values["initContainers"][0]["envFrom"] = [
                 {"secretRef": {"name": f"{name}-migration"}}
@@ -372,9 +373,7 @@ def deploy(args):
             values["env"] = {"BACKEND_HOST": f"{name}-backend"}
             values["service"] = {"annotations": {"idea-board/public-host": public_host}}
             if tls_secret:
-                base = yaml.safe_load(
-                    (values_root / "frontend/custom-values.yaml").read_text()
-                )
+                base = yaml.safe_load(VALUES["frontend"].read_text())
                 values["env"]["TLS_LISTEN"] = (
                     "listen 8443 ssl; ssl_certificate /etc/nginx/tls/tls.crt; ssl_certificate_key /etc/nginx/tls/tls.key;"
                 )
@@ -424,7 +423,7 @@ def deploy(args):
                 f"{name}-{component}",
                 str(chart),
                 "-f",
-                str(values_root / f"{component}/custom-values.yaml"),
+                str(VALUES[component]),
             ]
             if component == "frontend":
                 command += ["-f", str(ROOT / f"deploy/clouds/{args.cloud}.yaml")]

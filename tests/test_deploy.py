@@ -13,6 +13,7 @@ from scripts.deploy import (
     CHART,
     Deployment,
     ROOT,
+    VALUES,
     image_values,
     overrides,
     resource_values,
@@ -163,7 +164,7 @@ class DeploymentPolicyTests(unittest.TestCase):
 @unittest.skipUnless(shutil.which("helm"), "Helm is required for chart contract tests")
 class CommonChartTests(unittest.TestCase):
     def test_supplied_chart_is_unchanged(self):
-        manifest = json.loads((ROOT / "deploy/charts/nucleus-source.json").read_text())
+        manifest = json.loads((ROOT / "helm-common/nucleus-source.json").read_text())
         for relative, digest in manifest["sha256"].items():
             self.assertEqual(
                 hashlib.sha256((CHART / relative).read_bytes()).hexdigest(),
@@ -181,7 +182,7 @@ class CommonChartTests(unittest.TestCase):
                         f"idea-board-{component}",
                         str(CHART),
                         "-f",
-                        str(ROOT / f"deploy/{component}/custom-values.yaml"),
+                        str(VALUES[component]),
                     ]
                     if component == "frontend":
                         args += ["-f", str(ROOT / f"deploy/clouds/{cloud}.yaml")]

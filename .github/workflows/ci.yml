@@ -73,8 +73,8 @@ jobs:
       - run: terraform -chdir=infra test -no-color
       - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with: { version: v3.19.0 }
-      - run: helm lint deploy/charts/nucleus -f deploy/frontend/custom-values.yaml
-      - run: helm lint deploy/charts/nucleus -f deploy/backend/custom-values.yaml
+      - run: helm lint helm-common/nucleus -f helm-overides/idea-fe/custom-values.yaml
+      - run: helm lint helm-common/nucleus -f helm-overides/idea-be/custom-values.yaml
   compose:
     runs-on: ubuntu-latest
     steps:

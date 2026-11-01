@@ -19,5 +19,5 @@ security-check:
 	.venv/bin/python scripts/security_scan.py config
 
 helm-check:
-	helm lint deploy/charts/nucleus -f deploy/frontend/custom-values.yaml
-	helm lint deploy/charts/nucleus -f deploy/backend/custom-values.yaml
+	helm lint helm-common/nucleus -f helm-overides/idea-fe/custom-values.yaml
+	helm lint helm-common/nucleus -f helm-overides/idea-be/custom-values.yaml

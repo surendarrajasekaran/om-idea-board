@@ -20,7 +20,7 @@ flowchart LR
   Decision -->|recovery needed| Git
 ```
 
-The application repository owns the chart and values under `deploy/`. The [GitOps repository](https://github.com/surendarrajasekaran/infra-helm-charts) holds rendered manifests, release snapshots and the health monitor. Argo CD consumes those manifests. Each release records the source commit and immutable image digests.
+The application repository owns the chart in `helm-common/nucleus` and component values under `helm-overides/`. The [GitOps repository](https://github.com/surendarrajasekaran/infra-helm-charts) holds rendered manifests, release snapshots and the health monitor. Argo CD consumes those manifests. Each release records the source commit and immutable image digests.
 
 The frontend proxies `/api` to the backend; PostgreSQL remains private. The public test board is anonymous and uses HTTP, so use synthetic data.
 
@@ -31,8 +31,8 @@ The frontend proxies `/api` to the backend; PostgreSQL remains private. The publ
 | `frontend/`, `backend/` | Application, Dockerfiles and tests |
 | `docker-compose.yml` | Local database, migration, API and frontend |
 | `infra/` | AWS/GCP network, Kubernetes and PostgreSQL modules; AWS ECR/OIDC/state bootstrap |
-| `deploy/charts/nucleus/` | Single canonical, unchanged nucleus 1.1.0 chart |
-| `deploy/frontend/`, `deploy/backend/`, `deploy/clouds/` | Component values and cloud Service settings |
+| `helm-common/nucleus/` | Single canonical, unchanged nucleus 1.1.0 chart |
+| `helm-overides/idea-fe/`, `helm-overides/idea-be/`, `deploy/clouds/` | Component values and cloud Service settings |
 | `deploy/argocd/`, `deploy/gitops/` | Controller locks/configuration and Git host verification |
 | `scripts/gitops_release.py` | Render source chart and publish desired-state snapshots |
 | `scripts/gitops_monitor.py`, `scripts/gitops_state.py` | HTTP assessment and guarded Git recovery |
@@ -83,7 +83,7 @@ The API provides GET/POST `/api/ideas`, `/health/live`, `/health/ready`, `/healt
 
 ## AI and credentials
 
-The selected model is `gemini-3.5-flash-lite`. Both repositories set repository variable `AI_ENVIRONMENT=GEMINI_API_KEY`, selecting the dedicated environment containing secret `GEMINI_API_KEY` and variables `AI_PROVIDER=gemini`, `AI_MODEL=gemini-3.5-flash-lite`. AWS image/publish jobs use `aws-test` for their own configuration and short-lived OIDC credentials.
+The selected model is `gemini-3.5-flash-lite`. Both repositories set repository variable `AI_ENVIRONMENT=GEMINI_API_KEY`, selecting the dedicated environment containing secret `GEMINI_API_KEY` and variables `AI_PROVIDER=gemini`, `AI_MODEL=gemini-3.5-flash-lite`. AWS image/publish jobs use `aws-test` for their own configuration and short-lived OIDC credentials. The planning steps print the goal, model and validated result and add an **AI resource plan** table to the Actions run summary. Health runs add an **AI health assessment** table. The one-call AI-check workflow accepts a goal for demos.
 
 Manual release runs accept a resource goal; source pushes use `Cost-sensitive test environment for a small team`. Only bounded replica/CPU/memory proposals are accepted. Health requests contain numeric HTTP aggregates, never idea content, logs or credentials. Local hard gates can force recovery regardless of the model. Unavailable or rejected AI output is labeled `policy-fallback`; `require_ai=true` fails planning instead. Healthy unchanged releases avoid repeated model calls. [AI setup and policy details](docs/gitops.md#ai-provider-and-health-assessment) include project billing-tier conditions and secret placement.
 

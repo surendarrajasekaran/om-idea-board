@@ -1,6 +1,7 @@
 """Bounded AI release planning and health assessment. Never executes model output."""
 
 import argparse
+import html
 import json
 import os
 from pathlib import Path
@@ -327,12 +328,135 @@ def assess(data, require_ai=False, *, http_only=False):
     }
 
 
+def show_report(report, *, goal=None):
+    """Display approved fields, never request headers or raw provider envelopes."""
+    source = report["source"]
+    status = {
+        "live-ai": "Live AI response accepted",
+        "policy-fallback": "Policy fallback; no accepted live AI response",
+        "steady-state-policy": "Healthy release unchanged; AI call skipped",
+    }[source]
+    planning = "profile" in report
+    title = "AI resource plan" if planning else "AI health assessment"
+    request = {
+        "configured_provider": os.environ.get("AI_PROVIDER", "openai"),
+        "configured_model": os.environ.get("AI_MODEL")
+        or os.environ.get("OPENAI_MODEL", ""),
+        "task": "Resource planning" if planning else "Health assessment",
+        "input": {"environment": report["environment"], "goal": goal}
+        if planning
+        else report["evidence"],
+    }
+    if planning:
+        profile = validate_schema(report["profile"], PROFILE_SCHEMA)
+        result = {
+            "source": source,
+            "environment": report["environment"],
+            "profile": profile,
+        }
+        rows = [
+            ("Environment", report["environment"]),
+            ("Goal", goal),
+            ("Applies to", "Separate frontend and backend Deployments"),
+            ("Replicas per Deployment", profile["replicas"]),
+            ("CPU request per component", profile["cpu_request"]),
+            ("Memory request per component", profile["memory_request"]),
+            ("Rationale", profile["rationale"]),
+        ]
+    else:
+        fields = (
+            "decision",
+            "source",
+            "evidence",
+            "telemetry_coverage",
+            "summary",
+            "policy_violations",
+            "release_id",
+            "release_converged",
+            "functional_smoke",
+            "recovery_status",
+            "recovery_release_id",
+        )
+        result = {key: report[key] for key in fields if key in report}
+        rows = [
+            (key.replace("_", " ").capitalize(), value)
+            for key, value in result.items()
+            if key != "source"
+        ]
+    rows = [
+        ("Result", status),
+        ("Source", source),
+        ("Configured provider", request["configured_provider"]),
+        ("Configured model", request["configured_model"]),
+        *rows,
+    ]
+
+    # Redact known credentials even if accidentally included in a developer goal.
+    secrets = [
+        os.environ.get(key)
+        for key in (
+            "AI_API_KEY",
+            "GEMINI_API_KEY",
+            "OPENAI_API_KEY",
+            "NVIDIA_API_KEY",
+            "GROQ_API_KEY",
+            "GH_TOKEN",
+            "GITHUB_TOKEN",
+        )
+        if os.environ.get(key)
+    ]
+
+    def redact(value):
+        for secret in sorted(secrets, key=len, reverse=True):
+            value = value.replace(secret, "[REDACTED]")
+            value = value.replace(
+                json.dumps(secret, ensure_ascii=True)[1:-1], "[REDACTED]"
+            )
+        return value
+
+    # JSON escaping prevents user/model text from becoming Actions log commands.
+    print("AI result: " + status)
+    print("::group::AI input and configured model")
+    print(redact(json.dumps(request, indent=2, ensure_ascii=True)))
+    print("::endgroup::")
+    print("::group::Validated plan or health decision")
+    print(redact(json.dumps(result, indent=2, ensure_ascii=True)))
+    print("::endgroup::")
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if path:
+
+        def cell(value):
+            text = (
+                value
+                if isinstance(value, str)
+                else json.dumps(value, ensure_ascii=True)
+            )
+            return html.escape(redact(text)).replace("\n", "<br>").replace("\r", "")
+
+        # A raw HTML block keeps Markdown links/fences in untrusted text inert.
+        table = (
+            "<table>\n"
+            + "\n".join(
+                f'<tr><th align="left">{cell(label)}</th><td>{cell(value)}</td></tr>'
+                for label, value in rows
+            )
+            + "\n</table>\n"
+        )
+        with Path(path).open("a", encoding="utf-8") as output:
+            output.write(f"## {title}\n\n{table}\n")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--require-ai", action="store_true", help="Fail rather than use policy fallback"
     )
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--show-report",
+        action="store_true",
+        help="Print safe AI input/result and append an Actions job summary",
+    )
     commands = parser.add_subparsers(dest="command", required=True)
     planner = commands.add_parser("plan")
     planner.add_argument(
@@ -350,6 +474,8 @@ def main():
         )
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(result, indent=2) + "\n")
+        if args.show_report:
+            show_report(result, goal=args.goal if args.command == "plan" else None)
     except (ValueError, AIUnavailable, OSError) as exc:
         parser.exit(2, f"{type(exc).__name__}: {exc}\n")
     print(f"Wrote {args.output}; source={result['source']}")

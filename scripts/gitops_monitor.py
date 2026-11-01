@@ -8,12 +8,12 @@ import time
 import urllib.request
 
 try:
-    from .ai_ops import assess
+    from .ai_ops import assess, show_report
     from .gitops_state import current, mark_healthy, read_json, recover_images
     from .probe import collect
     from .smoke import smoke
 except ImportError:
-    from ai_ops import assess
+    from ai_ops import assess, show_report
     from gitops_state import current, mark_healthy, read_json, recover_images
     from probe import collect
     from smoke import smoke
@@ -42,7 +42,7 @@ def wait_for_release(url, release_id, timeout=600):
     return False
 
 
-def monitor(root, target, output, convergence_timeout=600):
+def monitor(root, target, output, convergence_timeout=600, *, display=False):
     metadata = current(root, target)
     if not metadata or not metadata.get("public_url"):
         raise ValueError("A verified deployment URL must be configured first")
@@ -104,10 +104,14 @@ def monitor(root, target, output, convergence_timeout=600):
             report["recovery_status"] = "operator-action-required"
             report["recovery_reason"] = str(exc)
             output.write_text(json.dumps(report, indent=2) + "\n")
+            if display:
+                show_report(report)
             raise
         output.write_text(json.dumps(report, indent=2) + "\n")
     elif not already_healthy:
         changed = mark_healthy(root, target, metadata["id"])
+    if display:
+        show_report(report)
     if changed:
         subprocess.run(["git", "add", "environments", "releases"], cwd=root, check=True)
         subprocess.run(
@@ -148,12 +152,19 @@ def main():
     parser.add_argument("--target", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--convergence-timeout", type=int, default=600)
+    parser.add_argument("--show-report", action="store_true")
     args = parser.parse_args()
     if not 30 <= args.convergence_timeout <= 1800:
         parser.error("Convergence timeout must be 30-1800 seconds")
     try:
         parser.exit(
-            monitor(args.root, args.target, args.output, args.convergence_timeout)
+            monitor(
+                args.root,
+                args.target,
+                args.output,
+                args.convergence_timeout,
+                display=args.show_report,
+            )
         )
     except (ValueError, OSError, subprocess.CalledProcessError) as exc:
         parser.exit(

@@ -1,5 +1,8 @@
 import io
 import json
+from contextlib import redirect_stdout
+from pathlib import Path
+import tempfile
 import unittest
 import urllib.error
 import urllib.request
@@ -12,8 +15,90 @@ from scripts.ai_ops import (
     ask_model,
     assess,
     plan,
+    show_report,
     validate_schema,
 )
+
+
+class ActionsReportTests(unittest.TestCase):
+    def render(self, report, goal=None, **environment):
+        with tempfile.TemporaryDirectory() as directory:
+            summary = Path(directory) / "summary.md"
+            env = {
+                "AI_PROVIDER": "gemini",
+                "AI_MODEL": "gemini-3.5-flash-lite",
+                "GITHUB_STEP_SUMMARY": str(summary),
+                **environment,
+            }
+            output = io.StringIO()
+            with patch.dict("os.environ", env, clear=True), redirect_stdout(output):
+                show_report(report, goal=goal)
+            return output.getvalue(), summary.read_text()
+
+    def profile(self, rationale="Cost-sensitive test"):
+        return {
+            "source": "live-ai",
+            "environment": "test",
+            "profile": {
+                "replicas": 1,
+                "cpu_request": "250m",
+                "memory_request": "128Mi",
+                "rationale": rationale,
+            },
+        }
+
+    def test_live_plan_is_visible_without_mutating_release_profile(self):
+        report = self.profile()
+        original = json.dumps(report)
+        output, summary = self.render(report, goal="Keep test costs low")
+        self.assertIn('"goal": "Keep test costs low"', output)
+        self.assertIn('"source": "live-ai"', output)
+        self.assertIn("AI resource plan", summary)
+        self.assertIn("Replicas per Deployment", summary)
+        self.assertIn("250m", summary)
+        self.assertIn("128Mi", summary)
+        self.assertIn("Live AI response accepted", summary)
+        self.assertEqual(json.dumps(report), original)
+
+    def test_untrusted_goal_and_model_text_cannot_inject_commands_or_html(self):
+        text = "<script>alert(1)</script>\n::warning::injected\n```\n[x](https://example.test)"
+        output, summary = self.render(self.profile(text), goal=text)
+        self.assertFalse(
+            any(line.startswith("::warning::") for line in output.splitlines())
+        )
+        self.assertNotIn("<script>", summary)
+        self.assertIn("&lt;script&gt;", summary)
+        self.assertNotIn("<a href=", summary)
+
+    def test_credentials_and_unapproved_fields_are_not_displayed(self):
+        secret = 'private-"test-credential\ncontinued'
+        report = self.profile("Goal echoed " + secret)
+        report["raw_response"] = {"Authorization": "secret-provider-envelope"}
+        output, summary = self.render(
+            report, goal="Goal " + secret, GEMINI_API_KEY=secret
+        )
+        for rendered in (output, summary):
+            self.assertNotIn(secret, rendered)
+            self.assertNotIn(json.dumps(secret)[1:-1], rendered)
+            self.assertNotIn("secret-provider-envelope", rendered)
+            self.assertIn("[REDACTED]", rendered)
+
+    def test_fallback_and_skipped_calls_are_not_presented_as_live_ai(self):
+        fallback = {**self.profile(), "source": "policy-fallback"}
+        output, summary = self.render(fallback, goal="Test")
+        self.assertIn("Policy fallback", summary)
+        self.assertNotIn("Live AI response accepted", output)
+        report = {
+            "source": "steady-state-policy",
+            "decision": "keep",
+            "telemetry_coverage": "http-only",
+            "evidence": {"requests": 20, "failures": 0, "p95_latency_ms": 50},
+        }
+        output, summary = self.render(report)
+        self.assertIn("AI health assessment", summary)
+        self.assertIn("AI call skipped", summary)
+        self.assertNotIn("restarts", output)
+        self.assertNotIn("Live AI response accepted", output)
 
 
 class GeminiTests(unittest.TestCase):
