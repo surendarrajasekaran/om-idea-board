@@ -1,3 +1,0 @@
-# GKE provisions an external L4 load balancer for the frontend Service.
-service:
-  annotations: {}

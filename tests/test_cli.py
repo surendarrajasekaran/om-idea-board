@@ -10,12 +10,25 @@ class CLITests(unittest.TestCase):
     def test_application_repository_does_not_track_helm_chart_copies(self):
         root = Path(__file__).resolve().parents[1]
         tracked = subprocess.check_output(
-            ["git", "ls-files", "--", "helm-common", "helm-overides", "helm-templates"],
+            [
+                "git",
+                "ls-files",
+                "--",
+                "helm-common",
+                "helm-overides",
+                "helm-templates",
+                "docs",
+                "deploy",
+                "infra",
+                "terraform",
+            ],
             cwd=root,
             text=True,
         )
         self.assertEqual(
-            tracked.strip(), "", "Helm chart ownership belongs to infra-helm-charts"
+            tracked.strip(),
+            "",
+            "Platform configuration belongs in the GitOps/Terraform repositories",
         )
 
     def test_entrypoints_do_not_shadow_standard_library(self):
@@ -23,15 +36,10 @@ class CLITests(unittest.TestCase):
         for name in (
             "smoke",
             "probe",
-            "deploy",
-            "run_platform",
-            "infra_init",
             "ai_ops",
             "security_scan",
             "gitops_release",
             "gitops_monitor",
-            "bootstrap_gitops",
-            "private_eks",
         ):
             with self.subTest(script=name):
                 result = subprocess.run(

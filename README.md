@@ -1,109 +1,132 @@
 # Idea Board
 
-React, FastAPI and PostgreSQL with reusable Terraform modules, private AWS infrastructure, Gemini resource planning and Argo CD delivery.
+A React frontend, FastAPI backend and PostgreSQL database. Application delivery uses ECR, Gemini planning and Argo CD.
 
-**Running:** [AWS test board](http://af0d4388f01a74cebb0d087102ac80e7-5adda6a4d01432b5.elb.us-west-2.amazonaws.com), account `812752207041` (`mit-qa`), region `us-west-2`. Live Gemini planning and deployed health assessment have passed. GCP modules and local checks are implemented; a GCP deployment and second public URL remain pending. See [verification](docs/verification.md) for measured results.
+## Which repository do I use?
 
-## Delivery
-
-```mermaid
-flowchart LR
-  Source[Application main push] --> CI[Tests and security checks]
-  CI --> AI[Gemini profile plus local policy]
-  AI --> ECR[Build and scan immutable ECR images]
-  ECR --> Render[Update image and resource Helm values]
-  Render --> Git[infra-helm-charts desired state]
-  Git --> Argo[Argo CD renders Helm inside private EKS]
-  Argo --> App[Frontend and API]
-  App --> Health[Version, readiness and create/read checks]
-  Health --> Decision[Gemini assessment plus hard gates]
-  Decision -->|recovery needed| Git
-```
-
-The [GitOps repository](https://github.com/surendarrajasekaran/infra-helm-charts) owns `helm-templates/nucleus` and `helm-overides/idea-fe|idea-be/custom-values.yaml`. CI updates each component’s immutable image tag/digest and validated resources in those values files. Argo CD renders the shared chart twice using separate Helm release names, producing separate frontend/backend Deployments and Services. The parent Argo Application in `argocd-manifests` renders the generic `helm-templates/argocd-app-controller` chart and maintains two child Applications, `idea-board-backend` and `idea-board-frontend`. Backend also owns the namespace security controls. Rendered snapshots are retained for validation and recovery; Argo consumes the Helm values directly.
-
-The frontend proxies `/api` to the backend; PostgreSQL remains private. The public test board is anonymous and uses HTTP, so use synthetic data.
-
-## Repository map
-
-| Path | Purpose |
+| Repository | Owns |
 | --- | --- |
-| `frontend/`, `backend/` | Application, Dockerfiles and tests |
-| `docker-compose.yml` | Local database, migration, API and frontend |
-| `infra/` | AWS/GCP network, Kubernetes and PostgreSQL modules; AWS ECR/OIDC/state bootstrap |
-| `deploy/gitops/chart-source.json` | Reviewed GitOps revision used for CI chart-contract checks |
-| `deploy/clouds/` | Cloud Service settings |
-| `deploy/argocd/`, `deploy/gitops/` | Controller locks/configuration and Git host verification |
-| `scripts/gitops_release.py` | Update GitOps Helm values, preview rendering and save recovery snapshots |
-| `scripts/gitops_monitor.py`, `scripts/gitops_state.py` | HTTP assessment and guarded Git recovery |
-| `scripts/ai_ops.py` | Schema-validated resource proposals and health advice |
-| `scripts/bootstrap_gitops.py`, `scripts/private_eks.py` | Private cluster bootstrap and SSM access |
-| `scripts/deploy.py`, `scripts/run_platform.py` | Shared renderer/bootstrap utilities and manual deployment for targets outside Argo ownership |
-| `tests/`, component test directories | Application, policy, chart, CLI and recovery checks |
+| **om-idea-board** — this repo | Frontend/backend, tests, CI and AI/GitOps helpers |
+| [infra-helm-charts](https://github.com/surendarrajasekaran/infra-helm-charts) | Helm charts, component values, parent/child Argo Applications, health workflow and rollback records |
+| [terraform-infrastructure](https://github.com/surendarrajasekaran/terraform-infrastructure) — private | Reusable AWS/GCP modules, cloud onboarding, state bootstrap and Argo controller installation |
 
-## Pipelines
+There is no `docs`, `deploy` or `infra` directory here. Terraform instructions are in the infrastructure repo's README. GitOps instructions are in its README.
 
-| Workflow | Trigger and responsibility |
-| --- | --- |
-| [Verify](.github/workflows/ci.yml) | PR/main checks: PostgreSQL and frontend tests, chart contracts, Terraform tests, Compose persistence, dependency/configuration scans |
-| [AWS ECR and Argo CD GitOps release](.github/workflows/gitops-release.yml) | Relevant main changes or manual run: verification, Gemini profile, amd64 image builds/scans and GitOps commit |
-| [Check live AI provider](.github/workflows/ai-check.yml) | Manual one-call, required-live planner check before changing a key/model |
-| [Infrastructure](.github/workflows/infrastructure.yml) | Manual Terraform plan/apply on the trusted private runner |
-| [Release checks](.github/workflows/reusable-tests.yml) | Shared verification called by the GitOps release |
-| GitOps repository: health | New release, manual run or five-minute schedule; verify deployment and recover through Git when required |
+## Run locally
 
-The retired GHCR/direct-Helm Actions workflow has been removed. Use Argo CD for the AWS test application's deployment ownership. [Manual cloud deployment](docs/full-flow.md) remains available for separate targets outside Argo ownership.
-
-## Local development
-
-With Docker and Compose v2:
+Prerequisites: Git, Docker and Docker Compose v2.
 
 ```sh
+git clone https://github.com/surendarrajasekaran/om-idea-board.git
+cd om-idea-board
 cp .env.example .env
-# Set the local database password in .env.
+# Set POSTGRES_PASSWORD in .env to a local development password.
 docker compose up --build --wait --wait-timeout 240
 ```
 
-Open [localhost:8080](http://localhost:8080). To stop the stack, run `docker compose down`; its PostgreSQL volume preserves local data.
+Open [http://localhost:8080](http://localhost:8080). Submit an idea and refresh to check persistence. Stop with `docker compose down`; the database volume stays. `docker compose down --volumes` also deletes local data.
 
-For local checks, install Python 3.12, Node.js 22 and Helm 3. Clone `infra-helm-charts` beside this checkout, or export `GITOPS_DIR` with its path. CI automatically checks out the reviewed revision from `deploy/gitops/chart-source.json`:
+## Deploy a change
+
+The AWS test platform and GitHub environments are already configured. A developer does not need cluster credentials for a normal release.
+
+1. Create a branch and edit `frontend/` or `backend/`.
+2. Open a pull request. **Verify** checks the application, chart contracts, security, build and Compose persistence.
+3. Merge to `main`. **AWS ECR and Argo CD GitOps release** runs automatically for application/helper changes.
+4. In Actions, open that workflow. It tests, asks Gemini for bounded resources, builds/scans both immutable ECR images, and commits image/resource values to `infra-helm-charts`.
+5. Argo reads that Git commit and reconciles the services. The GitOps **health** workflow verifies both versions, readiness and create/read, then records `keep` or a guarded Git rollback.
+
+For a manual release, open **Actions → AWS ECR and Argo CD GitOps release → Run workflow**, select `main`, enter a goal such as `Cost-sensitive test environment for a small team`, and optionally enable `require_ai` to reject fallback.
+
+```mermaid
+flowchart LR
+  Change[Merge application PR] --> CI[Tests and security]
+  CI --> AI[Validated Gemini resource plan]
+  AI --> Images[Build and scan ECR images]
+  Images --> Values[Commit Helm values to GitOps]
+  Values --> Parent[Argo parent maintains service Applications]
+  Parent --> Services[Frontend and backend]
+  Services --> Health[HTTP identity and functional checks]
+  Health -->|failed and verified recovery target exists| Values
+```
+
+CI updates `helm-overides/idea-fe/custom-values.yaml` and `helm-overides/idea-be/custom-values.yaml` in GitOps. Never deploy either service manually with Helm or `kubectl set image`.
+
+## How is Argo installed?
+
+Terraform provisions the network, Kubernetes, database, ECR and AWS publisher permissions. **Argo itself is installed with Helm, not Terraform**, by `apps/onboard/aws/bootstrap_argocd.py` in `terraform-infrastructure`, through the private EKS connection.
+
+That one-time platform bootstrap installs only Helm release `argocd` and applies the parent Application/projects from GitOps. Argo then manages this tree:
+
+```text
+idea-board-controller
+├── idea-board-frontend
+└── idea-board-backend
+```
+
+The parent renders the generic app-controller chart. Both children render nucleus with their own values. The parent and workload projects have separate permissions; workload Git cannot manage Secrets or cluster resources. Later application-definition changes reconcile from Git automatically.
+
+## Configure GitHub Actions
+
+These settings already exist for the current test. Configure them when onboarding another repository/target; enter secret values only through GitHub settings.
+
+| Location | Required settings |
+| --- | --- |
+| App repo variable | `AI_ENVIRONMENT=GEMINI_API_KEY` |
+| App and GitOps environment `GEMINI_API_KEY` | Secret `GEMINI_API_KEY`; variables `AI_PROVIDER=gemini`, `AI_MODEL=gemini-3.5-flash-lite` |
+| App environment `aws-test` | Secret `GITOPS_SSH_KEY` — a write deploy key for the GitOps repo |
+| App environment `aws-test` | Variables `REGION`, `AWS_ACCOUNT_ID`, `AWS_ECR_PUSH_ROLE_ARN`, `ECR_REGISTRY`, `ECR_REPOSITORY_PREFIX`, `GITOPS_REPOSITORY`, `DATABASE_EGRESS_CIDRS`, `PUBLIC_URL` |
+
+Use the exact variable names in [the release workflow](.github/workflows/gitops-release.yml). `DATABASE_EGRESS_CIDRS` is a JSON array of the Terraform database egress ranges. AWS publishing uses short-lived OIDC credentials and an ECR-only role. No AWS access keys, Kubernetes credentials or database passwords are needed by the application release/health runners.
+
+Gemini receives a generic resource goal or numeric HTTP aggregates. The response is schema/policy-validated. Test plans allow one replica and at most 250m requested CPU per service. Failures use explicitly labeled `policy-fallback`, unless live AI was required. Healthy unchanged releases skip AI calls. API billing depends on the project's actual billing tier and quota.
+
+## Demonstrate AI
+
+1. Open **Actions → Check live AI provider → Run workflow** on `main`.
+2. Enter a resource goal. This workflow plans only; it does not deploy.
+3. Show **AI resource plan** in the run summary and its step logs: goal, provider/model, accepted replicas/CPU/memory and rationale. `live-ai` confirms a live accepted response.
+4. For the full demo, run a release and show the GitOps values commit, all three Argo Applications and the subsequent **AI health assessment** summary in GitOps Actions.
+
+The monitor checks both release identities, 20 readiness requests and new-release create/read. It observes HTTP only. Hard gates can force recovery even if Gemini says `keep`. Recovery restores verified images/resources through Git and preserves current security and Secret references. It never rolls back database schema, data or infrastructure. A failed first installation has no known-good recovery target.
+
+## Which files are needed?
+
+| Path | Why it stays |
+| --- | --- |
+| `frontend/`, `backend/` | App code, Dockerfiles and component tests |
+| `scripts/ai_ops.py` | Gemini planning, assessment and safe Actions output |
+| `scripts/release_config.py`, `workload_policy.py` | Image/resource validation and namespace/network policy generation |
+| `scripts/gitops_release.py`, `gitops_state.py` | Update GitOps values and maintain checksummed release/recovery records |
+| `scripts/gitops_monitor.py`, `probe.py`, `smoke.py` | Health assessment and functional/recovery checks; GitOps loads a reviewed pinned source revision |
+| `scripts/security_scan.py` | Isolated configuration and immutable-image scan gates |
+| `scripts/requirements.txt`, `tests/` | Helper dependencies and regression checks |
+| `.github/` | Workflows, pinned GitOps source reference and verified GitHub SSH host keys |
+| `docker-compose.yml`, `.env.example` | Reproducible local development |
+| `Makefile`, `.gitignore`, `.editorconfig` | Short local commands, credential/build exclusions and formatting |
+
+The old direct-Helm deployment scripts and infrastructure workflow were removed. The remaining scripts are used by CI, GitOps monitoring or local checks.
+
+## Run checks
+
+Install Python 3.12, Node.js 22 and Helm 3.19. Clone `infra-helm-charts` beside this repo, or set `GITOPS_DIR` to its checkout.
 
 ```sh
-python3 -m venv .venv
+python3.12 -m venv .venv
 .venv/bin/pip install -r backend/requirements-dev.txt
 npm --prefix frontend ci
 make test
 make build
 make helm-check
+make security-check  # requires Docker
 ```
 
-Quick local backend tests use isolated SQLite. CI also verifies real PostgreSQL 16, runtime-role restrictions and Compose persistence. Terraform checks use version 1.11.4; `make infra-check` runs formatting, initialization, validation and mock-provider tests.
+Local API tests can use SQLite; CI also checks PostgreSQL 16 and database-role restrictions. CI fetches the reviewed chart revision in `.github/gitops-source.json`. Review that pin when upgrading chart contracts. Review/advance the GitOps health workflow's source pin when changing health/recovery helpers.
 
-The API provides GET/POST `/api/ideas`, `/health/live`, `/health/ready`, `/health/release` and internal `/metrics`. Ideas contain `id`, trimmed `content` (1–1000 characters) and server-generated `created_at`. The browser displays content as text.
+## Current deployment
 
-## AI and credentials
+AWS account `812752207041`, profile `mit-qa-administratoraccess`, region `us-west-2`, EKS/namespace `idea-board-test`.
 
-The selected model is `gemini-3.5-flash-lite`. Both repositories set repository variable `AI_ENVIRONMENT=GEMINI_API_KEY`, selecting the dedicated environment containing secret `GEMINI_API_KEY` and variables `AI_PROVIDER=gemini`, `AI_MODEL=gemini-3.5-flash-lite`. AWS image/publish jobs use `aws-test` for their own configuration and short-lived OIDC credentials. The planning steps print the goal, model and validated result and add an **AI resource plan** table to the Actions run summary. Health runs add an **AI health assessment** table. The one-call AI-check workflow accepts a goal for demos.
+[Open the AWS test board](http://af0d4388f01a74cebb0d087102ac80e7-5adda6a4d01432b5.elb.us-west-2.amazonaws.com). It is anonymous and HTTP-only; use synthetic data. Argo's UI and PostgreSQL remain private; operators use the private EKS route. Platform operator access is documented in the Terraform repo.
 
-Manual release runs accept a resource goal; source pushes use `Cost-sensitive test environment for a small team`. Only bounded replica/CPU/memory proposals are accepted. Health requests contain numeric HTTP aggregates, never idea content, logs or credentials. Local hard gates can force recovery regardless of the model. Unavailable or rejected AI output is labeled `policy-fallback`; `require_ai=true` fails planning instead. Healthy unchanged releases avoid repeated model calls. [AI setup and policy details](docs/gitops.md#ai-provider-and-health-assessment) include project billing-tier conditions and secret placement.
-
-Database passwords, state, saved plans, kubeconfigs and registry/AI credentials belong outside Git. The ignored local Terraform configuration is required to operate the existing state; repository cleanup does not delete it.
-
-## Infrastructure and operations
-
-AWS uses private EKS workers and API access, private RDS PostgreSQL, encrypted state and immutable ECR. GCP modules implement private GKE Autopilot, Cloud SQL and networking behind the same Terraform interface. Keep separate remote state per cloud/target. The test has one worker and single-instance database capacity; the running cloud resources remain chargeable.
-
-Application containers run without root privileges, use read-only roots and have bounded resources. Namespace admission, quotas and default-deny networking are independent of application rollback. Runtime database credentials have SELECT/INSERT access; migration credentials are separate, and connections verify database TLS. Production requires existing trusted TLS/DNS and the operational controls described below.
-
-GitOps recovery restores verified application images/resources while preserving current security and Secret references. Database migrations, data and infrastructure require their own recovery procedures.
-
-| Guide | Contents |
-| --- | --- |
-| [GitOps delivery](docs/gitops.md) | Pipeline configuration, private bootstrap, Gemini and recovery |
-| [Terraform modules](infra/README.md) | Reuse, state, sizing, networking and cloud-specific settings |
-| [Common chart](docs/common-chart-integration.md) | Canonical chart provenance, values mapping and rendering |
-| [Operations](docs/operations.md) | Migrations, diagnostics and recovery ownership |
-| [Platform review](docs/platform-review.md) | Security controls and remaining production work |
-| [Requirements](docs/requirements.md) | Assignment traceability and outstanding GCP delivery |
-| [Verification](docs/verification.md) | Observed CI, deployment and recovery evidence |
-| [AI continuation context](docs/AI_CONTEXT.md) | Current project handoff |
+The parent and two service Applications were verified Synced/Healthy. [Parent-layout delivery](https://github.com/surendarrajasekaran/om-idea-board/actions/runs/41297366032) and [independent live AI health](https://github.com/surendarrajasekaran/infra-helm-charts/actions/runs/41297523568) passed with matching versions, successful create/read and 20 readiness requests with zero failures. Live GCP provisioning and its second public URL remain outstanding; its Terraform root is maintained separately.

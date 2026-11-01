@@ -18,7 +18,7 @@ from scripts.ai_ops import (
 )
 from scripts.gitops_monitor import wait_for_release
 from scripts.gitops_release import publish
-from scripts.deploy import GITOPS_ROOT
+from scripts.release_config import GITOPS_ROOT
 from scripts.gitops_state import current, mark_healthy, recover_images, save_release
 
 

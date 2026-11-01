@@ -1,7 +1,0 @@
-# Reviewed 2026-10-31. This is one scoped exception, not permission for wildcard egress.
-misconfigurations:
-  - id: AWS-0104
-    paths:
-      - "terraform-aws-modules/eks/aws/node_groups.tf"
-    statement: "Nodes need TCP/443 to dynamic GHCR/AWS endpoints. The upstream egress-all rule is disabled; explicit rules allow HTTPS, VPC DNS, node traffic and private PostgreSQL only. Application pods have default-deny egress. Replace public HTTPS with a registry mirror/egress proxy when available."
-    expired_at: 2027-01-31

@@ -1,4 +1,4 @@
-"""One digest-pinned, isolated scanner for CI and laptop image/IaC checks."""
+"""One digest-pinned, isolated scanner for application configuration and images."""
 
 import argparse
 import os
@@ -125,44 +125,21 @@ def _scan(kind, reference, scratch):
             for folder in snapshot.rglob("*"):
                 if folder.is_dir():
                     folder.chmod(0o755)
-            (snapshot / ".trivyignore.yaml").chmod(0o444)
-            for cloud, region in [("aws", "us-east-1"), ("gcp", "us-central1")]:
-                import json
-
-                variables = snapshot / "infra/scan.auto.tfvars.json"
-                if variables.exists():
-                    variables.chmod(0o644)
-                variables.write_text(
-                    json.dumps(
-                        {
-                            "cloud": cloud,
-                            "region": region,
-                            "gcp_project": "scan-project",
-                            "admin_cidrs": ["203.0.113.10/32"],
-                        }
-                    )
-                )
-                variables.chmod(0o444)
-                print(f"Scanning {cloud} configuration", flush=True)
-                subprocess.run(
-                    command
-                    + [
-                        "--mount",
-                        f"type=bind,src={snapshot},dst=/workspace,readonly",
-                        SCANNER_IMAGE,
-                        "--cache-dir",
-                        "/work/cache",
-                        "config",
-                        "--ignorefile",
-                        "/workspace/.trivyignore.yaml",
-                        "--tf-vars",
-                        "/workspace/infra/scan.auto.tfvars.json",
-                        *gate,
-                        "/workspace",
-                    ],
-                    check=True,
-                    cwd=ROOT,
-                )
+            subprocess.run(
+                command
+                + [
+                    "--mount",
+                    f"type=bind,src={snapshot},dst=/workspace,readonly",
+                    SCANNER_IMAGE,
+                    "--cache-dir",
+                    "/work/cache",
+                    "config",
+                    *gate,
+                    "/workspace",
+                ],
+                check=True,
+                cwd=ROOT,
+            )
 
 
 def scan(kind, reference=""):

@@ -13,10 +13,7 @@ coverage/
 *.tfplan
 *.tfvars
 !*.example.tfvars
-infra/backend.tf
 crash.log
 artifacts/
 .DS_Store
 gha-creds-*.json
-
-infra/bootstrap/backend.tf

@@ -41,16 +41,10 @@ jobs:
       - run: npm ci && npm test && npm run build
         working-directory: frontend
 
-  platform:
+  security:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { persist-credentials: false }
-      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
-        with: { terraform_version: "1.11.4" }
-      - run: terraform -chdir=infra fmt -check -recursive
-      - run: terraform -chdir=infra init -backend=false -lockfile=readonly
-      - run: terraform -chdir=infra validate
-      - run: terraform -chdir=infra test -no-color
       - run: python3 scripts/security_scan.py config

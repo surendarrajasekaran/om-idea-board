@@ -1,7 +1,0 @@
-{
-  "name": "argo-cd",
-  "version": "10.11.6",
-  "appVersion": "v3.5.6",
-  "url": "https://github.com/argoproj/argo-helm/releases/download/argo-cd-10.11.6/argo-cd-10.11.6.tgz",
-  "sha256": "d8f096d87513b41ff754053a7f9604c943bf29c15436a79226fd51595ea67d05"
-}

@@ -61,18 +61,12 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm audit --audit-level=high
-  infrastructure:
+  helm:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: { persist-credentials: false }
       - uses: ./.github/actions/gitops-chart
-      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
-        with: { terraform_version: "1.11.4" }
-      - run: terraform -chdir=infra fmt -check -recursive
-      - run: terraform -chdir=infra init -backend=false
-      - run: terraform -chdir=infra validate
-      - run: terraform -chdir=infra test -no-color
       - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with: { version: v3.19.0 }
       - run: helm lint "$GITOPS_DIR/helm-templates/nucleus" -f "$GITOPS_DIR/helm-overides/idea-fe/custom-values.yaml"

@@ -7,7 +7,7 @@ import unittest
 
 import yaml
 
-from scripts.deploy import GITOPS_ROOT
+from scripts.release_config import GITOPS_ROOT
 
 
 @unittest.skipUnless(

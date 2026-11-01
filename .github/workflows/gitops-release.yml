@@ -6,8 +6,7 @@ on:
       - backend/**
       - frontend/**
       - scripts/**
-      - deploy/gitops/chart-source.json
-      - deploy/clouds/**
+      - .github/gitops-source.json
       - .github/workflows/gitops-release.yml
   workflow_dispatch:
     inputs:
@@ -145,7 +144,7 @@ jobs:
           printf '%s\n' "$GITOPS_SSH_KEY" > "$key"
           cat > "$RUNNER_TEMP/gitops-ssh" <<'SH'
           #!/bin/sh
-          exec ssh -i "$RUNNER_TEMP/gitops-key" -o IdentitiesOnly=yes -o UserKnownHostsFile="$GITHUB_WORKSPACE/deploy/gitops/github_known_hosts" -o StrictHostKeyChecking=yes "$@"
+          exec ssh -i "$RUNNER_TEMP/gitops-key" -o IdentitiesOnly=yes -o UserKnownHostsFile="$GITHUB_WORKSPACE/.github/github_known_hosts" -o StrictHostKeyChecking=yes "$@"
           SH
           chmod 700 "$RUNNER_TEMP/gitops-ssh"
           export GIT_SSH="$RUNNER_TEMP/gitops-ssh"

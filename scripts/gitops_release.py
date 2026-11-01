@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 try:
-    from .deploy import image_values, resource_values
+    from .release_config import image_values, resource_values
     from .workload_policy import namespace_resources
     from .gitops_state import (
         VALUE_FILES,
@@ -18,7 +18,7 @@ try:
         save_release,
     )
 except ImportError:
-    from deploy import image_values, resource_values
+    from release_config import image_values, resource_values
     from workload_policy import namespace_resources
     from gitops_state import (
         VALUE_FILES,

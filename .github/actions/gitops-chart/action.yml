@@ -9,7 +9,7 @@ runs:
         python3 - <<'PY'
         import json, os, re
         from pathlib import Path
-        source = json.loads(Path('deploy/gitops/chart-source.json').read_text())
+        source = json.loads(Path('.github/gitops-source.json').read_text())
         assert source['repository'] == 'surendarrajasekaran/infra-helm-charts'
         assert re.fullmatch('[0-9a-f]{40}', source['revision'])
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
