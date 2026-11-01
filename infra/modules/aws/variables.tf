@@ -135,3 +135,8 @@ variable "github_oidc_provider_arn" {
   default     = null
   description = "Reuse the account's GitHub OIDC provider; bootstrap creates it once when absent."
 }
+
+variable "github_oidc_subject_prefix" {
+  type    = string
+  default = null
+}

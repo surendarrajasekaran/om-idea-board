@@ -125,3 +125,5 @@ The selected test target uses optional `aws_enable_ssm_access=true` for private 
 AWS honors Systems Manager Quick Setup `QSConfigId-` ownership tags without trying to remove them on each plan. RDS PostgreSQL 16 defaults to mandatory SSL; the managed parameter remains explicitly `1` with the provider-reported pending-reboot application method, avoiding repeated apply-method-only drift. Verify runtime SSL and parameter apply status after any parameter-group change.
 
 When updating provider versions, generate platform hashes with `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64` before committing the lock file. Release verification initializes with `-lockfile=readonly`, so its Linux package hashes must already be present.
+
+Use `github_oidc_subject_prefix` from GitHub's OIDC repository settings when immutable subjects are enabled. Exact repository IDs, the deployment environment and STS audience are retained; see [the GitOps guide](../docs/gitops.md#github-oidc-subject-format).

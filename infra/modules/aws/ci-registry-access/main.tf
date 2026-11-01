@@ -4,7 +4,8 @@ resource "aws_iam_openid_connect_provider" "github" {
   client_id_list = ["sts.amazonaws.com"]
 }
 locals {
-  provider_arn = var.existing_oidc_provider_arn == null ? aws_iam_openid_connect_provider.github[0].arn : var.existing_oidc_provider_arn
+  provider_arn   = var.existing_oidc_provider_arn == null ? aws_iam_openid_connect_provider.github[0].arn : var.existing_oidc_provider_arn
+  subject_prefix = coalesce(var.subject_prefix, "repo:${var.github_repository}")
 }
 resource "aws_iam_role" "publisher" {
   name = "${var.name}-ecr-publisher"
@@ -16,7 +17,7 @@ resource "aws_iam_role" "publisher" {
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = { StringEquals = {
         "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-        "token.actions.githubusercontent.com:sub" = "repo:${var.github_repository}:environment:${var.github_environment}"
+        "token.actions.githubusercontent.com:sub" = "${local.subject_prefix}:environment:${var.github_environment}"
       } }
     }]
   })

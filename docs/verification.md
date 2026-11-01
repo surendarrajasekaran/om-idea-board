@@ -119,3 +119,7 @@ The local preview uses Docker Compose at http://localhost:8080. Test ideas remai
 Replace pending entries only with observed results. The deployment acceptance criteria are: public frontend works, new idea persists and appears through the API, database remains private, readiness passes, and a deliberately failed release returns to the prior verified healthy application through a GitOps recovery commit.
 
 The first remote CI run caught a Python 3.12 standard-library shadowing issue in the `platform.py` script name. The entry point is now `scripts/run_platform.py`, and a subprocess regression test covers every CLI. Consult GitHub Actions for the latest run status.
+
+## November 1 federation compatibility
+
+GitHub's OIDC settings returned an immutable owner/repository subject prefix. The first ECR authentication attempt failed because its trust policy still used the legacy name-only subject. The Terraform interface now accepts the exact prefix, validates its repository binding and preserves the aws-test environment and STS audience restrictions. Three mock-provider trust cases passed (legacy, immutable and unrelated-repository rejection), bringing the current Terraform suite to 11. The reviewed live plan changes only the existing ECR publisher's trust policy.

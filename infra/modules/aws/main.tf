@@ -48,4 +48,5 @@ module "ci_registry_access" {
   github_environment         = var.github_environment
   repository_arns            = [for service in ["frontend", "backend"] : module.ecr.repository_arns[service]]
   existing_oidc_provider_arn = var.github_oidc_provider_arn
+  subject_prefix             = var.github_oidc_subject_prefix
 }
