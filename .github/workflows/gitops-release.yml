@@ -39,7 +39,7 @@ jobs:
           GOAL: ${{ inputs.goal || 'Cost-sensitive test environment for a small team' }}
           REQUIRE_AI: ${{ inputs.require_ai }}
           AI_PROVIDER: ${{ vars.AI_PROVIDER || 'gemini' }}
-          AI_MODEL: ${{ vars.AI_MODEL || 'gemini-flash-latest' }}
+          AI_MODEL: ${{ vars.AI_MODEL || 'gemini-3.5-flash-lite' }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |

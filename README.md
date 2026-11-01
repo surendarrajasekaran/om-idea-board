@@ -203,7 +203,7 @@ Set these **environment variables** in GitHub Settings → Environments:
 | `GCP_PROJECT` | — | GCP project ID |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | — | Full provider resource path |
 | `GCP_SERVICE_ACCOUNT` | — | Provisioning service-account email |
-| `AI_PROVIDER` / `AI_MODEL` | `gemini` / `gemini-flash-latest` for this test | Same, or another supported provider/model |
+| `AI_PROVIDER` / `AI_MODEL` | `gemini` / `gemini-3.5-flash-lite` for this test | Same, or another supported provider/model |
 
 Set `GEMINI_API_KEY` as an **environment secret** in both repositories for live Gemini. Provider-specific keys override the legacy `AI_API_KEY`. Do not place it in a variable, chart value, image, or Terraform state.
 
@@ -220,7 +220,7 @@ No workflow sends secrets or cloud credentials to pull-request code. The main-on
 
 ## AI integration
 
-The AWS test uses Gemini’s native `generateContent` API with JSON-schema output and strict local validation. Set `AI_PROVIDER=gemini`, `AI_MODEL=gemini-flash-latest` and secret `GEMINI_API_KEY`; see the [GitOps guide](docs/gitops.md) for both-repository setup, free-tier billing conditions and provider alternatives. No AI-generated shell, Terraform, or Kubernetes commands are executed.
+The AWS test uses Gemini’s native `generateContent` API with JSON-schema output and strict local validation. Set `AI_PROVIDER=gemini`, `AI_MODEL=gemini-3.5-flash-lite` and secret `GEMINI_API_KEY`; see the [GitOps guide](docs/gitops.md) for both-repository setup, free-tier billing conditions and provider alternatives. No AI-generated shell, Terraform, or Kubernetes commands are executed.
 
 ### Resource planning
 
@@ -238,7 +238,7 @@ Unknown keys, wrong types, out-of-range values, and a one-replica production pro
 python3 scripts/ai_ops.py --output artifacts/profile.json plan \
   --environment staging --goal 'Cost-sensitive staging'
 
-# With AI_PROVIDER=gemini, AI_MODEL=gemini-flash-latest and GEMINI_API_KEY exported securely, require a real response:
+# With AI_PROVIDER=gemini, AI_MODEL=gemini-3.5-flash-lite and GEMINI_API_KEY exported securely, require a real response:
 python3 scripts/ai_ops.py --require-ai --output artifacts/profile.json plan \
   --environment production --goal 'High availability during a product launch'
 ```

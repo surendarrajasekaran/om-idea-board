@@ -30,7 +30,7 @@ For local builds, export `GHCR_USERNAME` and a package-write `GHCR_PUBLISH_TOKEN
 
 Do not put credentials in command history or tracked files. The deployment script sends credentials through stdin, not command-line arguments or Helm values. A supplied token becomes a persistent namespace pull secret; use an appropriate expiry/rotation policy, not a short-lived GitHub Actions token.
 
-To use live Gemini, export `AI_PROVIDER=gemini`, `AI_MODEL=gemini-flash-latest` and provide `GEMINI_API_KEY` through your secure secret mechanism. See the [GitOps guide](gitops.md) for billing-tier conditions and both-repository configuration. Add `--require-ai` to make an unavailable/rejected AI response fail the operation. Without these settings, JSON reports explicitly state `policy-fallback`.
+To use live Gemini, export `AI_PROVIDER=gemini`, `AI_MODEL=gemini-3.5-flash-lite` and provide `GEMINI_API_KEY` through your secure secret mechanism. See the [GitOps guide](gitops.md) for billing-tier conditions and both-repository configuration. Add `--require-ai` to make an unavailable/rejected AI response fail the operation. Without these settings, JSON reports explicitly state `policy-fallback`.
 
 ## 4. AWS: full provision → build/scan → deploy → verify
 
