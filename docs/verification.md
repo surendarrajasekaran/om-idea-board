@@ -2,6 +2,19 @@
 
 Earlier baseline verified locally on October 29, 2026. CI workflows define repeatable checks; remote run results are available in the repository's GitHub Actions. AWS test apply progress is recorded separately below; earlier local results do not imply a completed cloud deployment.
 
+## November 1 repository cleanup
+
+The application repository now owns the single canonical nucleus 1.1.0 chart and frontend/backend values. The GitOps publisher renders those files at its source commit; chart and value changes trigger the application release workflow. The duplicate chart, values and provenance copy were removed from the GitOps repository (24 files), leaving rendered desired state, bootstrap definitions, monitor helpers and immutable recovery snapshots.
+
+The retired GHCR/direct-Helm Actions workflow was removed. The README and AI handoff were consolidated around ECR/GitOps/Gemini, and manual non-Argo deployment/operations documentation was corrected. Both cloud Terraform adapters, the original chart/provenance, operational state and release recovery history were retained.
+
+- A real Helm regression test publishes into a GitOps repository with no chart directory. All **52** script/chart/policy/CLI/provider/recovery cases passed. Rendering the pre-cleanup release with the same inputs produced byte-identical frontend, backend and security-control manifests.
+- [Source CI for cleanup commit `4a7ede4`](https://github.com/surendarrajasekaran/om-idea-board/actions/runs/41283855193) passed, including 68 application/platform cases, 11 Terraform mock-provider cases, dependency/configuration checks and Compose persistence. Local Ruff, Actionlint and Markdown file-link checks passed.
+- [ECR/GitOps release from the canonical chart](https://github.com/surendarrajasekaran/om-idea-board/actions/runs/41283855117) passed verification, planning, both image scans and publication. GitOps release commit: `09b649d`.
+- GitOps cleanup commit `a863b1b` removed the duplicate chart files. [Health verification executed from that repository](https://github.com/surendarrajasekaran/infra-helm-charts/actions/runs/41284101126) passed with `source=live-ai`, `decision=keep`, matching component versions and successful create/read. It observed 20 requests, zero failures and p95 **230.86 ms**, with no policy violations. This is HTTP-only smoke evidence.
+
+Verified release: `4a7ede45f00627b1d8366e066580691cccf19c15-41283855117-1`. The actual current release and recovery status remain authoritative in the GitOps repository's `release.json` and `status.json`.
+
 ## November 1 Gemini live verification
 
 The selected provider is `gemini`, model `gemini-3.5-flash-lite`. Both repositories set repository variable `AI_ENVIRONMENT=GEMINI_API_KEY` to select the dedicated environment containing the rotated `GEMINI_API_KEY` secret. Its environment variables select the provider/model. AWS build/publish jobs continue to use `aws-test`. No key values are stored in source, reports or Terraform.
