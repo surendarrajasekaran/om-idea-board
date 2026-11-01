@@ -38,9 +38,10 @@ jobs:
         env:
           GOAL: ${{ inputs.goal || 'Cost-sensitive test environment for a small team' }}
           REQUIRE_AI: ${{ inputs.require_ai }}
-          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'nvidia' }}
-          AI_MODEL: ${{ vars.AI_MODEL || 'nvidia/llama-3.3-nemotron-super-49b-v1.5' }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'gemini' }}
+          AI_MODEL: ${{ vars.AI_MODEL || 'gemini-flash-latest' }}
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           args=()
           if [ "$REQUIRE_AI" = "true" ]; then args+=(--require-ai); fi

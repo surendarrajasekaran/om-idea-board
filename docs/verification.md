@@ -16,7 +16,7 @@ Earlier baseline verified locally on October 29, 2026. CI workflows define repea
 | Database | Private encrypted RDS available; live API uses ideas_app over TLS 1.3, without superuser/CREATEROLE/CREATEDB |
 | NAT / EKS / workers | Created; EKS 1.35.9 Ready with private API, private worker and no control-plane health issues |
 | Argo CD / public application | Installed; application Synced/Healthy; public frontend/backend identity and create/read smoke passed |
-| AI | NVIDIA/Groq/OpenAI adapters tested with mocked responses; no provider key or live AI response yet |
+| AI | Gemini selected; 51 script/chart/policy tests pass, including 7 Gemini request/response/security cases with additional subcases. Hosted live Gemini verification pending |
 
 Public AWS test URL: [Idea Board](http://af0d4388f01a74cebb0d087102ac80e7-5adda6a4d01432b5.elb.us-west-2.amazonaws.com). The baseline health report measured 20 requests, zero failures and p95 561.68 ms from the operator laptop; this is a small remote smoke observation, not a load benchmark. The assessment was explicitly `policy-fallback`, and the real create/read smoke created verification idea 1. Healthy status was committed to the deployment repository.
 

@@ -43,6 +43,10 @@ jobs:
         with: { python-version: "3.12" }
       - name: Generate validated release profile
         env:
+          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'gemini' }}
+          AI_MODEL: ${{ vars.AI_MODEL || 'gemini-flash-latest' }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
           GOAL: ${{ inputs.goal }}
@@ -180,6 +184,10 @@ jobs:
       - name: Deploy, verify, and roll back on failure
         env:
           GHCR_TOKEN: ${{ secrets.GHCR_READ_TOKEN }}
+          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'gemini' }}
+          AI_MODEL: ${{ vars.AI_MODEL || 'gemini-flash-latest' }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         shell: bash
         run: |

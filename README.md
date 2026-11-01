@@ -4,7 +4,7 @@ A small React + FastAPI + PostgreSQL application with container builds, two Terr
 
 **Current status:** AWS test is running in `mit-qa` / `us-west-2`: private EKS, private RDS, immutable ECR images and Argo CD GitOps delivery. [Open the test board](http://af0d4388f01a74cebb0d087102ac80e7-5adda6a4d01432b5.elb.us-west-2.amazonaws.com). Public create/read and readiness checks passed, and the baseline release is recorded healthy. Both repositories and their Actions workflows are published through the personal GitHub account. The release pipeline publishes scanned ECR digests to GitOps; live AI still needs a provider API key. GCP and its second public URL remain pending. See [verification](docs/verification.md) for precise evidence and limitations.
 
-The AWS test delivery path now uses private ECR and a separate Argo CD GitOps repository. Read the [GitOps guide](docs/gitops.md) for the two-repository pipeline, private-cluster administration, NVIDIA/Groq/OpenAI providers and guarded recovery. Observed cloud progress is tracked in [verification](docs/verification.md).
+The AWS test delivery path now uses private ECR and a separate Argo CD GitOps repository. Read the [GitOps guide](docs/gitops.md) for the two-repository pipeline, private-cluster administration, Gemini/NVIDIA/Groq/OpenAI providers and guarded recovery. Observed cloud progress is tracked in [verification](docs/verification.md).
 
 For continuation in a new AI session or on another laptop, read [the AI context handoff](docs/AI_CONTEXT.md).
 
@@ -203,9 +203,9 @@ Set these **environment variables** in GitHub Settings → Environments:
 | `GCP_PROJECT` | — | GCP project ID |
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | — | Full provider resource path |
 | `GCP_SERVICE_ACCOUNT` | — | Provisioning service-account email |
-| `OPENAI_MODEL` | Your enabled structured-output model | Same |
+| `AI_PROVIDER` / `AI_MODEL` | `gemini` / `gemini-flash-latest` for this test | Same, or another supported provider/model |
 
-Set `OPENAI_API_KEY` as an **environment secret** if using live AI. Do not place it in a variable, chart value, image, or Terraform state.
+Set `GEMINI_API_KEY` as an **environment secret** in both repositories for live Gemini. Provider-specific keys override the legacy `AI_API_KEY`. Do not place it in a variable, chart value, image, or Terraform state.
 
 ### Workflow behavior
 
@@ -220,7 +220,7 @@ No workflow sends secrets or cloud credentials to pull-request code. The main-on
 
 ## AI integration
 
-This implementation uses the OpenAI Responses API with strict JSON-schema output. No AI-generated shell, Terraform, or Kubernetes commands are executed. `OPENAI_MODEL` is explicit because model availability belongs to the account configuration. See [official structured-output documentation](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses).
+The AWS test uses Gemini’s native `generateContent` API with JSON-schema output and strict local validation. Set `AI_PROVIDER=gemini`, `AI_MODEL=gemini-flash-latest` and secret `GEMINI_API_KEY`; see the [GitOps guide](docs/gitops.md) for both-repository setup, free-tier billing conditions and provider alternatives. No AI-generated shell, Terraform, or Kubernetes commands are executed.
 
 ### Resource planning
 
@@ -238,7 +238,7 @@ Unknown keys, wrong types, out-of-range values, and a one-replica production pro
 python3 scripts/ai_ops.py --output artifacts/profile.json plan \
   --environment staging --goal 'Cost-sensitive staging'
 
-# With OPENAI_API_KEY and OPENAI_MODEL exported, require a real model response:
+# With AI_PROVIDER=gemini, AI_MODEL=gemini-flash-latest and GEMINI_API_KEY exported securely, require a real response:
 python3 scripts/ai_ops.py --require-ai --output artifacts/profile.json plan \
   --environment production --goal 'High availability during a product launch'
 ```

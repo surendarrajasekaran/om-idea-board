@@ -29,19 +29,23 @@ The old direct Helm workflow skips AWS test deployment. Do not run `deploy.py` o
 
 ## AI provider and health assessment
 
-Supported providers are `nvidia`, `groq`, and `openai`. Endpoints are fixed HTTPS allowlists; arbitrary proxy endpoints are not accepted. Provider responses are parsed and locally checked against a strict schema. Model text is never executed. Only resource goals or aggregate request counts/latency go to the model, never database credentials or idea content.
+Supported providers are `gemini`, `nvidia`, `groq`, and `openai`. The selected provider for this test is Gemini. Endpoints are fixed HTTPS allowlists; arbitrary proxy endpoints are not accepted. Provider responses are parsed and locally checked against a strict schema. Model text is never executed. Only resource goals or aggregate request counts/latency go to the model, never database credentials or idea content.
 
-NVIDIA offers hosted open models for prototyping through its Developer Program; current access, quotas and terms are controlled by NVIDIA. A trial is not an unlimited production service. See [NVIDIA's API introduction](https://docs.api.nvidia.com/nim/docs/product). ChatGPT/Claude website access does not supply API credentials for a pipeline. Self-hosting an open model on an AWS GPU would add compute cost to this small test environment.
+Gemini uses Google's native `generateContent` REST API with `x-goog-api-key` authentication in a header and JSON-schema output. The model identifier is validated before constructing the fixed Google URL; authentication headers are never forwarded on redirects. Blocked, truncated, oversized, malformed or out-of-policy output is rejected locally. A request has a 30-second timeout, one candidate and a 1,200-token output limit; quota errors are not retried or switched to another provider.
 
 The `aws-test` GitHub environment in **both repositories** uses:
 
 | Setting | Value |
 | --- | --- |
-| Variable `AI_PROVIDER` | `nvidia` |
-| Variable `AI_MODEL` | `nvidia/llama-3.3-nemotron-super-49b-v1.5` |
-| Secret `AI_API_KEY` | A provider key entered through GitHub's secret settings |
+| Variable `AI_PROVIDER` | `gemini` |
+| Variable `AI_MODEL` | `gemini-flash-latest` |
+| Secret `GEMINI_API_KEY` | A Gemini API key entered through GitHub's secret settings |
 
-Without a key or on provider/schema failure, reports explicitly say `policy-fallback`. The release form's `require_ai` option rejects fallback for planning. No live model response should be claimed until a real call succeeds. Groq requires a model supporting the structured-output format used by the adapter.
+Create the key in [Google AI Studio](https://aistudio.google.com/api-keys), then add it to the `aws-test` environment secrets in [om-idea-board](https://github.com/surendarrajasekaran/om-idea-board/settings/environments) and [infra-helm-charts](https://github.com/surendarrajasekaran/infra-helm-charts/settings/environments). A repository secret with the same name also works. A provider-specific key takes precedence over the legacy generic `AI_API_KEY`; remove obsolete generic keys when switching providers. Never paste keys into chat, commands, manifests or Terraform. Revoke exposed keys and update both secrets with the replacement.
+
+Select a **Free Tier** project in AI Studio to stay within its free quota. A billing-enabled project's requests can incur charges; selecting Gemini or creating a key does not guarantee free usage. The requested `gemini-flash-latest` alias can change its underlying model and availability. Check the project's actual quota and [Google's current pricing](https://ai.google.dev/gemini-api/docs/pricing) before enabling billing or changing models. Free-tier content may be used to improve Google's products: send only generic resource goals and numeric health aggregates, never sensitive operational data. See the [model alias documentation](https://ai.google.dev/gemini-api/docs/models#latest).
+
+Without a key or on provider/schema failure, reports explicitly say `policy-fallback`. The release form's `require_ai` option rejects fallback for planning. No live model response should be claimed until a real call succeeds. OpenAI, NVIDIA and Groq adapters remain available with their own configured model/key; Groq requires a model supporting the adapter's structured-output format.
 
 The GitOps repository's health workflow runs on new release metadata, manual dispatch and a five-minute schedule (GitHub scheduling can be delayed). It waits for three consecutive responses matching **both** the frontend release header and backend release body, measures 20 readiness requests, and performs a create/read smoke test on a new release. This creates one identifiable test idea. Existing healthy releases avoid repeated model calls. This monitor has HTTP-only telemetry; it does not claim to observe pod restarts, logs, CPU or memory.
 
