@@ -377,6 +377,14 @@ class DetailedPlanningTests(unittest.TestCase):
         self.assertEqual(
             payload["constraints"]["allowed_cpu_requests"], ["100m", "250m"]
         )
+        self.assertEqual(
+            payload["constraints"]["fixed_container_limits"],
+            {"cpu": "1", "memory": "512Mi"},
+        )
+        self.assertIn(
+            "Actual use may exceed requests",
+            payload["constraints"]["resource_semantics"],
+        )
         self.assertEqual(report["profile"], self.profile)
         self.assertEqual(report["explanation"], self.explanation)
         self.assertEqual(report["source"], "live-ai")

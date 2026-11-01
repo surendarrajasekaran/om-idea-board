@@ -25,8 +25,8 @@ PROFILE_SCHEMA = {
 EXPLANATION_FIELDS = {
     "goal_interpretation": "What the developer is requesting, including unsupported requests.",
     "replica_rationale": "Why the replica count is appropriate and its availability trade-offs.",
-    "cpu_rationale": "Why this CPU request was chosen over the allowed alternatives.",
-    "memory_rationale": "Why this memory request was chosen over the allowed alternatives.",
+    "cpu_rationale": "Why this CPU request was chosen over the allowed alternatives. Requests affect scheduling and CPU shares, not the throttling ceiling.",
+    "memory_rationale": "Why this memory request was chosen over the allowed alternatives. Requests affect scheduling; the unchanged memory limit governs container OOM risk.",
     "alternatives_and_tradeoffs": "Compare plausible allowed profiles, then explain the selected balance.",
     "assumptions": "State assumptions and distinguish them from supplied evidence.",
     "risks_and_limitations": "Describe capacity, availability and measurement limitations.",
@@ -328,6 +328,9 @@ def plan(environment, goal, require_ai=False):
                 "Write approximately 500-750 words across the explanation sections. "
                 "Explain choices, alternatives, assumptions, limitations and verification. "
                 "No live usage measurements or prices are supplied; never invent them. "
+                "Resource requests are not hard limits. Do not claim that raising requests "
+                "prevents OOM kills or CPU throttling, or guarantees stability or free node capacity. "
+                "State unmeasured outcomes as possibilities requiring validation. "
                 "Discuss unsupported developer requests explicitly. "
                 "Provide a decision summary, not private internal reasoning.",
                 {
@@ -343,6 +346,7 @@ def plan(environment, goal, require_ai=False):
                         "allowed_memory_requests": ["128Mi", "256Mi", "512Mi"],
                         "scope": "One shared profile for the frontend and backend application containers; no per-service sizing.",
                         "fixed_container_limits": {"cpu": "1", "memory": "512Mi"},
+                        "resource_semantics": "CPU requests set scheduler reservation and relative shares under contention; throttling is governed by the fixed 1 CPU limit. Memory requests influence placement and eviction, not a hard usage ceiling; the fixed 512Mi limit governs container OOM kills. Actual use may exceed requests. No proof of stability or free node capacity is supplied.",
                         "unchanged": "Init containers, node count/size, database, networking and application code.",
                         "usage_evidence": "No measured CPU, memory or traffic data supplied. No capacity or performance guarantee.",
                         "billing": "Changing requests does not automatically change the bill of the existing fixed-size worker.",
