@@ -11,6 +11,12 @@ Updated November 1, 2026. This file records current project state; historical te
 - Argo CD owns the AWS test application's rollout and Git-based recovery. The old GHCR/direct-Helm Actions workflow is retired. Manual `run_platform.py`/`deploy.py` remain for separate, non-Argo targets and shared rendering/bootstrap utilities.
 - Both cloud Terraform implementations remain part of the assignment. AWS is deployed; GCP deployment and its second public URL are still outstanding.
 
+## Two-Application bootstrap and ownership
+
+GitOps `de890e7` adds the generic Application chart and removes the old combined `bootstrap/idea-board-test.yaml`. Application definitions are installed/upgraded through Helm bootstrap release `idea-board-test-apps`; component image/resource values still reconcile automatically from Git. Both Applications were privately verified Synced/Healthy, with no conditions. Migration preserved all eight resource UIDs and identical Deployment/Service specifications. Default deletion has no cascading finalizer; no replica-ignore rules weaken AI sizing reconciliation.
+
+Source `56b646d` pins the new GitOps revision, adds chart tests and a tracked-chart ownership guard, removes an obsolete scanner exclusion and updates private bootstrap flags. All 64 script/platform tests passed locally; source CI `41294713094` and GitOps validation `41294657818` passed. Release `41294713160` passed and published GitOps `80d786f`. Both Applications then reconciled that revision and their ready Deployments matched the exact images/resources/release IDs. Independent health `41294864083` passed live-ai/keep, paired convergence, create/read, 20 requests with zero failures and p95 78.13 ms. GitOps `3078959` records it healthy without pending rollback. Current release/history files remain authoritative.
+
 ## Latest Helm migration and demo evidence
 
 Source `d5a7717` passed CI `41291253831` (58 script/platform cases; 74 application/platform overall plus 11 Terraform cases) and ECR/GitOps release `41291253782`. GitOps `16a83ee` published Helm values and checksummed rendered/value snapshots for release `d5a7717f2cbe9164dfb98d365435f602cbcd8a98-41291253782-1`. The live Argo Application was applied with backend Helm, frontend Helm and a controls-only directory source; private API verification returned Synced/Healthy, three matching revisions, no conditions and two ready Deployments. New-release health `41291414658` returned live-ai/keep, create/read passed, 20 requests, zero failures, p95 96.12 ms.
