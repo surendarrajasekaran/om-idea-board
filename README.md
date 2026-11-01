@@ -2,7 +2,7 @@
 
 A small React + FastAPI + PostgreSQL application with container builds, two Terraform cloud adapters, and bounded AI tools for release planning and health assessment.
 
-**Current status:** Local application/platform verification passes. AWS test provisioning in `mit-qa` / `us-west-2` is in progress, with private RDS and ECR created; Kubernetes/Argo/public endpoint verification is pending. AWS delivery now has an ECR → separate GitOps repository → Argo CD path. GCP deployment and the second public URL remain pending. The supplied nucleus 1.1.0 chart stays unchanged. See [verification](docs/verification.md), the [module guide](infra/README.md) and [platform/security review](docs/platform-review.md).
+**Current status:** AWS test is running in `mit-qa` / `us-west-2`: private EKS, private RDS, immutable ECR images and Argo CD GitOps delivery. [Open the test board](http://af0d4388f01a74cebb0d087102ac80e7-5adda6a4d01432b5.elb.us-west-2.amazonaws.com). Public create/read and readiness checks passed, and the baseline release is recorded healthy. The new GitHub Actions files are committed locally but await the personal account's workflow authorization before publication; live AI also needs a provider API key. GCP and its second public URL remain pending. See [verification](docs/verification.md) for precise evidence and limitations.
 
 The AWS test delivery path now uses private ECR and a separate Argo CD GitOps repository. Read the [GitOps guide](docs/gitops.md) for the two-repository pipeline, private-cluster administration, NVIDIA/Groq/OpenAI providers and guarded recovery. Observed cloud progress is tracked in [verification](docs/verification.md).
 

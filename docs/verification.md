@@ -13,10 +13,18 @@ Earlier baseline verified locally on October 29, 2026. CI workflows define repea
 | Remote state | Versioned private S3, TLS requirement, rotating customer KMS key; current bootstrap/application state objects verified SSE-KMS |
 | Registry | Two immutable private ECR repositories created |
 | CI federation | Exact source-repository/aws-test OIDC publisher role created; no cluster administration |
-| Database | Private RDS PostgreSQL instance created; cloud runtime role/TLS application connection pending |
-| NAT / EKS / workers | Apply in progress after AWS approved the Elastic IP quota increase |
-| Argo CD / public application / cloud rollback exercise | Pending installation and live verification |
+| Database | Private encrypted RDS available; live API uses ideas_app over TLS 1.3, without superuser/CREATEROLE/CREATEDB |
+| NAT / EKS / workers | Created; EKS 1.35.9 Ready with private API, private worker and no control-plane health issues |
+| Argo CD / public application | Installed; application Synced/Healthy; public frontend/backend identity and create/read smoke passed |
 | AI | NVIDIA/Groq/OpenAI adapters tested with mocked responses; no provider key or live AI response yet |
+
+Public AWS test URL: [Idea Board](http://af0d4388f01a74cebb0d087102ac80e7-5adda6a4d01432b5.elb.us-west-2.amazonaws.com). The baseline health report measured 20 requests, zero failures and p95 561.68 ms from the operator laptop; this is a small remote smoke observation, not a load benchmark. The assessment was explicitly `policy-fallback`, and the real create/read smoke created verification idea 1. Healthy status was committed to the deployment repository.
+
+Live isolation checks confirmed the backend cannot connect to public HTTPS or instance metadata. The worker has no public IP, encrypted 20 GiB gp3, required IMDSv2 and hop limit 1. The private SSM path preserves endpoint CA/hostname checks. A final exact-target Terraform plan returned no differences.
+
+Both actual published Linux amd64 frontend/backend digests passed the fixable HIGH/CRITICAL Trivy gate. The initial upstream Argo image and older Redis image failed their scans. The selected Docker hardened Argo 3.5.6 package scan and Redis 8.10.3 scan passed; the Argo mirror's platform manifest digest matches its upstream exactly. The hardened-image scan did not discover embedded Go module metadata, so it is a distribution-package result with maintained vendor provenance, not a complete language-level vulnerability claim.
+
+The personal GitHub token lacks the `workflow` scope and its device authorization attempt expired. The source changes and new Actions workflows remain local; the deployment repository's foundation, desired state and health helpers are published through the authorized personal account. The scheduled health workflow is still local and is not running remotely. Manual health assessment currently supplies the observed evidence. Source CI-to-ECR-to-GitOps execution and live model calls remain unverified.
 
 The GitOps implementation adds nine meaningful cases to the preceding 35-script suite, including immutable history, snapshot corruption, stale recovery, recovery preserving security/Secret references while restoring images/resources, no-first-release recovery, provider response validation and matching frontend/backend identity. The shared Terraform suite adds ECR coverage. The 13 PostgreSQL and three React cases bring the distinct application/platform total to 60; repeat backend runs are not counted twice.
 
@@ -87,17 +95,17 @@ The local preview uses Docker Compose at http://localhost:8080. Test ideas remai
 
 | Field | AWS | GCP |
 | --- | --- | --- |
-| Environment | Pending | Pending |
-| Public application URL | Pending | Pending |
+| Environment | test / mit-qa / us-west-2 | Pending |
+| Public application URL | [AWS test](http://af0d4388f01a74cebb0d087102ac80e7-5adda6a4d01432b5.elb.us-west-2.amazonaws.com) | Pending |
 | Frontend image digest | Pending | Pending |
 | Backend image digest | Pending | Pending |
 | Common chart version | nucleus 1.1.0 vendored unchanged | nucleus 1.1.0 vendored unchanged |
 | Infrastructure workflow run | Pending | Pending |
 | Release/deployment workflow run | Pending | Pending |
-| Smoke test | Pending | Pending |
-| Health report | Pending | Pending |
+| Smoke test | Public create/read passed | Pending |
+| Health report | Keep, policy-fallback; HTTP-only | Pending |
 | Rollback exercise | Pending | Pending |
 
-Replace pending entries only with observed results. The deployment acceptance criteria are: public frontend works, new idea persists and appears through the API, database remains private, readiness passes, and a deliberately failed release returns to the prior healthy chart revision.
+Replace pending entries only with observed results. The deployment acceptance criteria are: public frontend works, new idea persists and appears through the API, database remains private, readiness passes, and a deliberately failed release returns to the prior verified healthy application through a GitOps recovery commit.
 
 The first remote CI run caught a Python 3.12 standard-library shadowing issue in the `platform.py` script name. The entry point is now `scripts/run_platform.py`, and a subprocess regression test covers every CLI. Consult GitHub Actions for the latest run status.

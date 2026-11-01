@@ -40,4 +40,8 @@ redis:
     limits: { cpu: 500m, memory: 128Mi }
 dex: { enabled: false }
 notifications: { enabled: false }
-applicationSet: { enabled: false }
+applicationSet:
+  replicas: 0
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 128Mi }

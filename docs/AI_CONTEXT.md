@@ -4,7 +4,7 @@ Historical baseline updated October 30, 2026. This is a project handoff for a ne
 
 ## Current continuation status - October 31, 2026
 
-The October 31 platform/security and GitOps changes supersede baseline commit `6349e55`. Read Git status and [verification](verification.md) for publication and deployment evidence. AWS test provisioning in account `812752207041` / `us-west-2` has created private RDS, ECR, an exact-environment GitHub publisher role and KMS-backed state storage. EKS/NAT provisioning is underway; no public endpoint or live AI success is claimed yet. Follow [the GitOps guide](gitops.md) for the current two-repository deployment model; use the older direct Helm flow below only for other targets.
+The October 31 platform/security and GitOps changes supersede baseline commit `6349e55`. Read Git status and [verification](verification.md) for publication and deployment evidence. AWS test provisioning in account `812752207041` / `us-west-2` has created private RDS, ECR, an exact-environment GitHub publisher role and KMS-backed state storage. EKS/NAT/worker and Argo CD are created. Public frontend/backend identity and create/read checks passed; a healthy baseline is committed to the deployment repository. The backend uses a nonprivileged ideas_app role with TLS 1.3, and live pod egress restrictions were verified. No live AI success is claimed. New source/workflow publication awaits the personal GitHub token workflow scope; the deployment repository is published, with its scheduled workflow still local. Follow [the GitOps guide](gitops.md) for the current two-repository deployment model; use the older direct Helm flow below only for other targets.
 
 
 ### AWS test GitOps continuation
