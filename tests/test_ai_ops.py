@@ -177,6 +177,7 @@ class GeminiTests(unittest.TestCase):
         ):
             plan("test", "Minimize cost", require_ai=True)
         self.assertNotIn("sensitive provider detail", str(caught.exception))
+        self.assertIn("HTTP 429", str(caught.exception))
 
     def test_gemini_cannot_exceed_test_resource_policy(self):
         for changes in ({"replicas": 2}, {"cpu_request": "500m"}):

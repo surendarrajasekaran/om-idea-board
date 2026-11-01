@@ -1,0 +1,25 @@
+name: Check live AI provider
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: ${{ vars.AI_ENVIRONMENT || 'aws-test' }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: { persist-credentials: false }
+      - name: Require a live, policy-valid resource proposal
+        env:
+          AI_PROVIDER: ${{ vars.AI_PROVIDER || 'gemini' }}
+          AI_MODEL: ${{ vars.AI_MODEL || 'gemini-flash-latest' }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python scripts/ai_ops.py --require-ai --output artifacts/ai-check.json plan \
+            --environment test --goal 'Cost-sensitive test environment for a small team'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with: { name: live-ai-check, path: artifacts/ai-check.json }

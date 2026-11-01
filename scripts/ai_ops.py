@@ -158,6 +158,11 @@ def ask_model(task, payload, schema):
             if envelope.get("promptFeedback", {}).get("blockReason"):
                 raise AIUnavailable("Model request was blocked")
             candidates = envelope["candidates"]
+            if (
+                len(candidates) == 1
+                and candidates[0].get("finishReason") == "MAX_TOKENS"
+            ):
+                raise AIUnavailable("Gemini response exhausted the output-token limit")
             if len(candidates) != 1 or candidates[0].get("finishReason") != "STOP":
                 raise AIUnavailable("Model response did not complete")
             parts = candidates[0]["content"]["parts"]
@@ -187,6 +192,9 @@ def ask_model(task, payload, schema):
             if part.get("type") == "output_text"
         ]
         return validate_schema(json.loads("".join(chunks)), schema)
+    except urllib.error.HTTPError as exc:
+        # Expose status only; provider messages may contain credentials or input.
+        raise AIUnavailable(f"AI request failed (HTTP {exc.code})") from None
     except (
         urllib.error.URLError,
         TimeoutError,
@@ -233,7 +241,7 @@ def plan(environment, goal, require_ai=False):
     except (AIUnavailable, ValueError) as exc:
         if require_ai:
             raise AIUnavailable(
-                "Live AI proposal unavailable or rejected by policy"
+                f"Live AI proposal unavailable or rejected by policy: {exc}"
             ) from exc
         proposal = fallback
     return {"environment": environment, "source": source, "profile": proposal}
