@@ -72,6 +72,41 @@ class ArgoApplicationsTests(unittest.TestCase):
                 "FailOnSharedResource=true", app["spec"]["syncPolicy"]["syncOptions"]
             )
 
+    def test_parent_manages_children_with_a_separate_scoped_project(self):
+        parent = yaml.safe_load(
+            (GITOPS_ROOT / "argocd-manifests/idea-board-controller.yaml").read_text()
+        )
+        self.assertEqual(
+            parent["spec"]["source"]["path"], "helm-templates/argocd-app-controller"
+        )
+        self.assertEqual(
+            parent["spec"]["source"]["helm"]["valueFiles"],
+            ["../../helm-overides/argocd-app-controller/custom-values.yaml"],
+        )
+        projects = {
+            item["metadata"]["name"]: item["spec"]
+            for item in yaml.safe_load_all(
+                (GITOPS_ROOT / "argocd-manifests/projects.yaml").read_text()
+            )
+        }
+        controller = projects[parent["spec"]["project"]]
+        self.assertEqual(
+            controller["namespaceResourceWhitelist"],
+            [{"group": "argoproj.io", "kind": "Application"}],
+        )
+        self.assertEqual(
+            controller["destinations"],
+            [{"namespace": "argocd", "server": "https://kubernetes.default.svc"}],
+        )
+        workload = projects["idea-board-test"]
+        self.assertEqual(workload["clusterResourceWhitelist"], [])
+        self.assertFalse(
+            any(
+                item["kind"] in ("Secret", "Application", "AppProject")
+                for item in workload["namespaceResourceWhitelist"]
+            )
+        )
+
     def test_disabled_entries_and_empty_defaults_create_nothing(self):
         self.assertEqual(self.render({}), [])
         self.values["applications"]["idea-board-backend"]["enabled"] = False

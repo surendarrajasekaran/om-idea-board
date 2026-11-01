@@ -160,7 +160,7 @@ jobs:
             --backend-image "$(cat artifacts/images/backend-image.txt)" "${args[@]}"
           git -C "$RUNNER_TEMP/gitops" config user.name 'idea-board-release[bot]'
           git -C "$RUNNER_TEMP/gitops" config user.email 'idea-board-release@users.noreply.github.com'
-          git -C "$RUNNER_TEMP/gitops" add helm-overides environments releases
+          git -C "$RUNNER_TEMP/gitops" add helm-overides argocd-manifests releases
           git -C "$RUNNER_TEMP/gitops" commit -m "release($TARGET): $GITHUB_SHA"
           git -C "$RUNNER_TEMP/gitops" push origin HEAD:main
           echo 'Desired state published. Argo CD reconciles it; the GitOps repository health workflow verifies the exact release.' >> "$GITHUB_STEP_SUMMARY"

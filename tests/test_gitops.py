@@ -88,7 +88,7 @@ class GitOpsRecoveryTests(unittest.TestCase):
         self.publish("healthy", "a")
         mark_healthy(self.root, self.target, "healthy")
         self.publish("failed", "b")
-        path = self.root / "environments" / self.target / "manifests/backend.yaml"
+        path = self.root / "releases" / self.target / "manifests/backend.yaml"
         failed_backend = yaml.safe_load(path.read_text())
         failed_backend["spec"]["replicas"] = 3
         failed_backend["spec"]["template"]["spec"]["containers"][0]["resources"] = {
@@ -96,20 +96,20 @@ class GitOpsRecoveryTests(unittest.TestCase):
         }
         path.write_text(yaml.safe_dump(failed_backend))
         before = (
-            self.root / "environments" / self.target / "manifests/controls.yaml"
+            self.root / "argocd-manifests" / self.target / "controls.yaml"
         ).read_text()
         recovered = recover_images(self.root, self.target, "failed")
         self.assertEqual(recovered["images"], images("a"))
         self.assertEqual(current(self.root, self.target)["id"], recovered["id"])
         self.assertEqual(
             (
-                self.root / "environments" / self.target / "manifests/controls.yaml"
+                self.root / "argocd-manifests" / self.target / "controls.yaml"
             ).read_text(),
             before,
         )
         backend = yaml.safe_load(
             (
-                self.root / "environments" / self.target / "manifests/backend.yaml"
+                self.root / "releases" / self.target / "manifests/backend.yaml"
             ).read_text()
         )["spec"]["template"]["spec"]
         self.assertEqual(yaml.safe_load(path.read_text())["spec"]["replicas"], 1)
@@ -243,6 +243,10 @@ class GitOpsPublishingTests(unittest.TestCase):
                 "rotated-ca-secret",
             )
             self.assertFalse((root / "gitops/charts").exists())
+            self.assertFalse((root / "gitops/environments").exists())
+            self.assertFalse(
+                (root / "gitops/releases/idea-board-aws-test/manifests").exists()
+            )
             for component, folder in [("frontend", "idea-fe"), ("backend", "idea-be")]:
                 values = yaml.safe_load(
                     (
@@ -258,7 +262,7 @@ class GitOpsPublishingTests(unittest.TestCase):
             for component in ("frontend", "backend"):
                 path = (
                     root
-                    / f"gitops/environments/idea-board-aws-test/manifests/{component}.yaml"
+                    / f"gitops/releases/idea-board-aws-test/canonical-chart/{component}.yaml"
                 )
                 documents = list(yaml.safe_load_all(path.read_text()))
                 self.assertFalse(
@@ -351,7 +355,7 @@ class GitOpsPublishingTests(unittest.TestCase):
             self.assertEqual(recovery["delivery"], "helm")
             self.assertEqual(
                 (
-                    root / "environments/idea-board-aws-test/manifests/controls.yaml"
+                    root / "argocd-manifests/idea-board-aws-test/controls.yaml"
                 ).read_text(),
                 rendered["controls.yaml"],
             )

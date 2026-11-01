@@ -52,7 +52,7 @@ def monitor(root, target, output, convergence_timeout=600, *, display=False):
     measured = collect(metadata["public_url"], 20, 0)
     samples = {key: value for key, value in measured.items() if key != "restarts"}
     status = read_json(
-        root / "environments" / target / "status.json", {"healthy_releases": []}
+        root / "releases" / target / "status.json", {"healthy_releases": []}
     )
     already_healthy = bool(
         status["healthy_releases"] and status["healthy_releases"][0] == metadata["id"]
@@ -113,7 +113,7 @@ def monitor(root, target, output, convergence_timeout=600, *, display=False):
     if display:
         show_report(report)
     if changed:
-        paths = ["environments", "releases"]
+        paths = ["argocd-manifests", "releases"]
         if (root / "helm-overides").exists():
             paths.append("helm-overides")
         subprocess.run(["git", "add", *paths], cwd=root, check=True)

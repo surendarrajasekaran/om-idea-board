@@ -98,7 +98,7 @@ def write_json(path, value):
 
 
 def current(root, target):
-    return read_json(Path(root) / "environments" / identifier(target) / "release.json")
+    return read_json(Path(root) / "releases" / identifier(target) / "release.json")
 
 
 def save_release(root, target, metadata, manifests, expected=None, *, helm_values=None):
@@ -134,7 +134,7 @@ def save_release(root, target, metadata, manifests, expected=None, *, helm_value
                     raise ValueError("Secrets must never be committed to GitOps")
                 if item.get("kind") == "List":
                     pending.extend(item.get("items", []))
-    destination = root / "environments" / target
+    destination = root / "releases" / target
     managed = destination / "manifests"
     if managed.exists() and any(file.name not in FILES for file in managed.iterdir()):
         raise ValueError("Refuse to replace unmanaged files in the manifests directory")
@@ -156,8 +156,17 @@ def save_release(root, target, metadata, manifests, expected=None, *, helm_value
             path.write_text(content)
     write_json(archive / "release.json", metadata)
     managed.mkdir(parents=True, exist_ok=True)
-    for file, content in manifests.items():
-        (managed / file).write_text(content)
+    controls = root / "argocd-manifests" / target / "controls.yaml"
+    controls.parent.mkdir(parents=True, exist_ok=True)
+    controls.write_text(manifests["controls.yaml"])
+    if helm_values is None:
+        # Compatibility for existing manifest-only targets; Helm targets need no preview copies.
+        for file in ("backend.yaml", "frontend.yaml"):
+            (managed / file).write_text(manifests[file])
+    else:
+        for file in FILES:
+            (managed / file).unlink(missing_ok=True)
+        managed.rmdir()
     write_json(destination / "release.json", metadata)
     return metadata
 
@@ -192,7 +201,7 @@ def mark_healthy(root, target, expected):
     metadata = current(root, target)
     if not metadata or metadata["id"] != expected:
         raise ValueError("Stale health report")
-    status_path = Path(root) / "environments" / target / "status.json"
+    status_path = Path(root) / "releases" / target / "status.json"
     status = read_json(status_path, {"healthy_releases": []})
     if (
         status["healthy_releases"]
@@ -214,7 +223,7 @@ def recover_images(root, target, expected):
     metadata = current(root, target)
     if not metadata or metadata["id"] != expected:
         raise ValueError("Stale rollback: release has changed")
-    destination = Path(root) / "environments" / target
+    destination = Path(root) / "releases" / target
     status = read_json(destination / "status.json", {"healthy_releases": []})
     if status.get("rollback_pending"):
         raise ValueError("Recovery is already pending; operator action is required")
@@ -269,7 +278,7 @@ def recover_images(root, target, expected):
             f"{metadata['name']}-{metadata['environment']}",
         )
         manifests["controls.yaml"] = (
-            destination / "manifests/controls.yaml"
+            Path(root) / "argocd-manifests" / target / "controls.yaml"
         ).read_text()
         replacement = {
             key: value
@@ -291,7 +300,13 @@ def recover_images(root, target, expected):
         status.update(rollback_pending=True, last_failed_release=expected)
         write_json(destination / "status.json", status)
         return result
-    manifests = {file: (destination / "manifests" / file).read_text() for file in FILES}
+    manifests = {
+        file: (destination / "manifests" / file).read_text()
+        for file in ("backend.yaml", "frontend.yaml")
+    }
+    manifests["controls.yaml"] = (
+        Path(root) / "argocd-manifests" / target / "controls.yaml"
+    ).read_text()
     for component in ("backend", "frontend"):
         archive = Path(root) / "releases" / target / previous["id"]
         prior_documents = [
