@@ -29,7 +29,7 @@ jobs:
   profile:
     needs: verify
     runs-on: ubuntu-latest
-    environment: aws-test
+    environment: ${{ vars.AI_ENVIRONMENT || 'aws-test' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

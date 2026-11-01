@@ -33,15 +33,16 @@ Supported providers are `gemini`, `nvidia`, `groq`, and `openai`. The selected p
 
 Gemini uses Google's native `generateContent` REST API with `x-goog-api-key` authentication in a header and JSON-schema output. The model identifier is validated before constructing the fixed Google URL; authentication headers are never forwarded on redirects. Blocked, truncated, oversized, malformed or out-of-policy output is rejected locally. A request has a 30-second timeout, one candidate and a 1,200-token output limit; quota errors are not retried or switched to another provider.
 
-The `aws-test` GitHub environment in **both repositories** uses:
+AI jobs can use a dedicated secret environment. Set the repository variable `AI_ENVIRONMENT` to its name; otherwise they use the target environment (`aws-test`). The current test uses **environment `GEMINI_API_KEY` in both repositories**, where the replacement secret was saved. AWS image/publish jobs use `aws-test` independently. Configure these values in the selected AI environment:
 
 | Setting | Value |
 | --- | --- |
+| Repository variable `AI_ENVIRONMENT` | `GEMINI_API_KEY` for this test; optional, defaults to target environment |
 | Variable `AI_PROVIDER` | `gemini` |
 | Variable `AI_MODEL` | `gemini-flash-latest` |
 | Secret `GEMINI_API_KEY` | A Gemini API key entered through GitHub's secret settings |
 
-Create the key in [Google AI Studio](https://aistudio.google.com/api-keys), then add it to the `aws-test` environment secrets in [om-idea-board](https://github.com/surendarrajasekaran/om-idea-board/settings/environments) and [infra-helm-charts](https://github.com/surendarrajasekaran/infra-helm-charts/settings/environments). A repository secret with the same name also works. A provider-specific key takes precedence over the legacy generic `AI_API_KEY`; remove obsolete generic keys when switching providers. Never paste keys into chat, commands, manifests or Terraform. Revoke exposed keys and update both secrets with the replacement.
+Create the key in [Google AI Studio](https://aistudio.google.com/api-keys), then add it as a secret in the selected AI environment in [om-idea-board](https://github.com/surendarrajasekaran/om-idea-board/settings/environments) and [infra-helm-charts](https://github.com/surendarrajasekaran/infra-helm-charts/settings/environments). A repository secret with the same name also works. Environment names and secret names are separate settings; a workflow can only read environment secrets from the environment declared on its job. The older direct Helm workflow reads keys from its cloud/environment job and does not use this GitOps-specific selector. A provider-specific key takes precedence over the legacy generic `AI_API_KEY`; remove obsolete generic keys when switching providers. Never paste keys into chat, commands, manifests or Terraform. Revoke exposed keys and update both secrets with the replacement.
 
 Select a **Free Tier** project in AI Studio to stay within its free quota. A billing-enabled project's requests can incur charges; selecting Gemini or creating a key does not guarantee free usage. The requested `gemini-flash-latest` alias can change its underlying model and availability. Check the project's actual quota and [Google's current pricing](https://ai.google.dev/gemini-api/docs/pricing) before enabling billing or changing models. Free-tier content may be used to improve Google's products: send only generic resource goals and numeric health aggregates, never sensitive operational data. See the [model alias documentation](https://ai.google.dev/gemini-api/docs/models#latest).
 
