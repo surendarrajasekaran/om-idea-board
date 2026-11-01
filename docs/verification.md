@@ -24,7 +24,7 @@ Live isolation checks confirmed the backend cannot connect to public HTTPS or in
 
 Both actual published Linux amd64 frontend/backend digests passed the fixable HIGH/CRITICAL Trivy gate. The initial upstream Argo image and older Redis image failed their scans. The selected Docker hardened Argo 3.5.6 package scan and Redis 8.10.3 scan passed; the Argo mirror's platform manifest digest matches its upstream exactly. The hardened-image scan did not discover embedded Go module metadata, so it is a distribution-package result with maintained vendor provenance, not a complete language-level vulnerability claim.
 
-The personal GitHub token lacks the `workflow` scope and its device authorization attempt expired. The source changes and new Actions workflows remain local; the deployment repository's foundation, desired state and health helpers are published through the authorized personal account. The scheduled health workflow is still local and is not running remotely. Manual health assessment currently supplies the observed evidence. Source CI-to-ECR-to-GitOps execution and live model calls remain unverified.
+GitHub workflow authorization and AWS SSO renewal completed on November 1. Source and deployment workflows are now published through the personal account. The first remote run passed application/frontend/Compose and Terraform module tests, but exposed two Linux portability issues: read-only provider initialization needed explicit Linux h1 hashes, and a fixed scanner UID made its private cache impossible for the host runner to delete. Provider lock entries are generated from signed registry packages for Linux amd64 and macOS arm64; the scanner now uses the unprivileged host UID/GID and a private disposable cache. Follow the repository's Actions run results for the subsequent pipeline evidence. No live model call has been made.
 
 The GitOps implementation adds nine meaningful cases to the preceding 35-script suite, including immutable history, snapshot corruption, stale recovery, recovery preserving security/Secret references while restoring images/resources, no-first-release recovery, provider response validation and matching frontend/backend identity. The shared Terraform suite adds ECR coverage. The 13 PostgreSQL and three React cases bring the distinct application/platform total to 60; repeat backend runs are not counted twice.
 
@@ -36,7 +36,7 @@ Argo CD applied recovery release `recovery-1793509010408156000`. Both public rel
 
 The private administration session expired during a controller Helm update, leaving a pending Helm revision. Restoring its last deployed controller revision and retrying the configuration update succeeded. This controller maintenance recovery is separate from the application's GitOps recovery.
 
-The further cost change that scales the unused ApplicationSet controller to zero is committed in source configuration and awaits renewed AWS SSO access to apply. The chart ignores an `applicationSet.enabled` setting; the corrected configuration uses `replicas: 0` and was render-verified.
+The further cost change that scales the unused ApplicationSet controller to zero is applied after renewed AWS SSO access. The chart ignores an `applicationSet.enabled` setting; the corrected configuration uses `replicas: 0` and was render-verified.
 
 ## October 31 platform/security verification
 

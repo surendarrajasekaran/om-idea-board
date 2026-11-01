@@ -123,3 +123,5 @@ Set `github_repository` and reuse `github_oidc_provider_arn` to enable the narro
 The selected test target uses optional `aws_enable_ssm_access=true` for private API administration through an SSM-managed worker. EKS public access CIDRs are omitted when the endpoint is private; private RFC1918 addresses must not be sent as public endpoint CIDRs. See [the GitOps guide](../docs/gitops.md) for the current target, KMS backend settings, bootstrap and ownership boundaries.
 
 AWS honors Systems Manager Quick Setup `QSConfigId-` ownership tags without trying to remove them on each plan. RDS PostgreSQL 16 defaults to mandatory SSL; the managed parameter remains explicitly `1` with the provider-reported pending-reboot application method, avoiding repeated apply-method-only drift. Verify runtime SSL and parameter apply status after any parameter-group change.
+
+When updating provider versions, generate platform hashes with `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64` before committing the lock file. Release verification initializes with `-lockfile=readonly`, so its Linux package hashes must already be present.

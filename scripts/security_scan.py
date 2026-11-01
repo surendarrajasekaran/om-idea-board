@@ -20,7 +20,7 @@ def _scan(kind, reference, scratch):
         "--read-only",
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
-        "--user=65532:65532",
+        f"--user={os.getuid()}:{os.getgid()}",
         "--tmpfs",
         "/tmp:rw,size=256m,mode=1777",
         "--mount",
@@ -168,10 +168,13 @@ def _scan(kind, reference, scratch):
 
 
 def scan(kind, reference=""):
+    if os.getuid() == 0:
+        raise ValueError("Run the scanner as an unprivileged host user")
     # The current vulnerability DB expands beyond 1 GiB. Keep it on disposable
     # disk rather than charging that footprint to the scanner's memory limit.
     with tempfile.TemporaryDirectory(prefix="platform-scanner-cache-") as scratch:
-        Path(scratch).chmod(0o777)
+        # Match host/container ownership so Linux can remove private tool caches.
+        Path(scratch).chmod(0o700)
         _scan(kind, reference, scratch)
 
 
