@@ -22,6 +22,6 @@ security-check:
 	.venv/bin/python scripts/security_scan.py config
 
 helm-check:
-	helm lint "$(GITOPS_DIR)/helm-common/nucleus" -f "$(GITOPS_DIR)/helm-overides/idea-fe/custom-values.yaml"
-	helm lint "$(GITOPS_DIR)/helm-common/nucleus" -f "$(GITOPS_DIR)/helm-overides/idea-be/custom-values.yaml"
-	helm lint "$(GITOPS_DIR)/helm-templates/argocd-app-controller" -f "$(GITOPS_DIR)/bootstrap/idea-board-applications.yaml"
+	helm lint "$(GITOPS_DIR)/helm-templates/nucleus" -f "$(GITOPS_DIR)/helm-overides/idea-fe/custom-values.yaml"
+	helm lint "$(GITOPS_DIR)/helm-templates/nucleus" -f "$(GITOPS_DIR)/helm-overides/idea-be/custom-values.yaml"
+	helm lint "$(GITOPS_DIR)/helm-templates/argocd-app-controller" -f "$(GITOPS_DIR)/helm-overides/argocd-app-controller/custom-values.yaml"

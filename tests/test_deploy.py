@@ -166,7 +166,7 @@ class DeploymentPolicyTests(unittest.TestCase):
 class CommonChartTests(unittest.TestCase):
     def test_supplied_chart_is_unchanged(self):
         manifest = json.loads(
-            (GITOPS_ROOT / "helm-common/nucleus-source.json").read_text()
+            (GITOPS_ROOT / "helm-templates/nucleus-source.json").read_text()
         )
         for relative, digest in manifest["sha256"].items():
             self.assertEqual(

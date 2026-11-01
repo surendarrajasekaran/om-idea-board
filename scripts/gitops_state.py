@@ -48,7 +48,7 @@ def helm_manifests(root, values, name, namespace):
                     "helm",
                     "template",
                     f"{name}-{component}",
-                    str(Path(root) / "helm-common/nucleus"),
+                    str(Path(root) / "helm-templates/nucleus"),
                     "--namespace",
                     namespace,
                     "--skip-tests",

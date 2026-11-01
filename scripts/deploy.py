@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 GITOPS_ROOT = Path(
     os.environ.get("GITOPS_DIR", ROOT.parent / "infra-helm-charts")
 ).resolve()
-CHART = GITOPS_ROOT / "helm-common/nucleus"
+CHART = GITOPS_ROOT / "helm-templates/nucleus"
 VALUES = {
     "frontend": GITOPS_ROOT / "helm-overides/idea-fe/custom-values.yaml",
     "backend": GITOPS_ROOT / "helm-overides/idea-be/custom-values.yaml",
@@ -317,7 +317,7 @@ class Deployment:
 
 
 def deploy(args, *, gitops_dir=None):
-    chart = Path(gitops_dir) / "helm-common/nucleus" if gitops_dir else CHART
+    chart = Path(gitops_dir) / "helm-templates/nucleus" if gitops_dir else CHART
     values_files = (
         {
             key: Path(gitops_dir) / path.relative_to(GITOPS_ROOT)

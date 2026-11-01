@@ -180,7 +180,7 @@ class GitOpsRecoveryTests(unittest.TestCase):
 @unittest.skipUnless(shutil.which("helm"), "Helm is required for GitOps rendering")
 class GitOpsPublishingTests(unittest.TestCase):
     def repository(self, root):
-        shutil.copytree(GITOPS_ROOT / "helm-common", root / "helm-common")
+        shutil.copytree(GITOPS_ROOT / "helm-templates", root / "helm-templates")
         shutil.copytree(GITOPS_ROOT / "helm-overides", root / "helm-overides")
 
     def test_publish_updates_service_values_for_direct_helm(self):

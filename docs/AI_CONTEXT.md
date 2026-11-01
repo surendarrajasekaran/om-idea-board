@@ -5,11 +5,17 @@ Updated November 1, 2026. This file records current project state; historical te
 ## Repositories and ownership
 
 - Source: `surendarrajasekaran/om-idea-board`; GitOps desired state: `surendarrajasekaran/infra-helm-charts`.
-- GitOps `helm-common/nucleus` is the single canonical unchanged nucleus 1.1.0 chart, with `helm-common/nucleus-source.json` hashes. GitOps values are `helm-overides/idea-fe/custom-values.yaml` and `helm-overides/idea-be/custom-values.yaml`.
-- `gitops_release.py` updates the current GitOps values with immutable images/resources/release identity, previews Helm rendering and records checksummed rendered/value snapshots. The generic GitOps `helm-templates/argocd-app-controller` chart creates two Applications using bootstrap values in `bootstrap/idea-board-applications.yaml`: `idea-board-backend` and `idea-board-frontend`. Each renders the chart with its own stable release name; backend also includes only namespace controls as an additional source. The separate Helm bootstrap release is `idea-board-test-apps` in `argocd`, with no parent Application. They reconcile independently; the release monitor checks the pair. Rendered application files are evidence/recovery inputs, not Argo's application source.
+- GitOps `helm-templates/nucleus` is the single canonical unchanged nucleus 1.1.0 chart, with `helm-templates/nucleus-source.json` hashes. GitOps values are `helm-overides/idea-fe/custom-values.yaml` and `helm-overides/idea-be/custom-values.yaml`.
+- `gitops_release.py` updates the current GitOps values with immutable images/resources/release identity, previews Helm rendering and records checksummed rendered/value snapshots. The generic GitOps `helm-templates/argocd-app-controller` chart creates two Applications using bootstrap values in `helm-overides/argocd-app-controller/custom-values.yaml`: `idea-board-backend` and `idea-board-frontend`. Each renders the chart with its own stable release name; backend also includes only namespace controls as an additional source. The separate Helm bootstrap release is `idea-board-test-apps` in `argocd`, with no parent Application. They reconcile independently; the release monitor checks the pair. Rendered application files are evidence/recovery inputs, not Argo's application source.
 - Source CI checks out the reviewed GitOps revision in `deploy/gitops/chart-source.json`; local checks use a sibling checkout or `GITOPS_DIR`. There is no duplicate chart in the application repository.
 - Argo CD owns the AWS test application's rollout and Git-based recovery. The old GHCR/direct-Helm Actions workflow is retired. Manual `run_platform.py`/`deploy.py` remain for separate, non-Argo targets and shared rendering/bootstrap utilities.
 - Both cloud Terraform implementations remain part of the assignment. AWS is deployed; GCP deployment and its second public URL are still outstanding.
+
+## Unified chart layout
+
+Both charts are under GitOps `helm-templates`: `nucleus` and `argocd-app-controller`. Controller values enabling the two Applications are `helm-overides/argocd-app-controller/custom-values.yaml`; component overrides remain `idea-fe` and `idea-be`. There is no `helm-common` directory or bootstrap application-values copy. Only the scoped AppProject remains in `bootstrap`.
+
+Private Helm bootstrap release `idea-board-test-apps` revision 2 switched both live Applications to the new chart path. Both were Synced/Healthy and all eight resource UIDs/specifications stayed unchanged. Original chart checksums and rendered resources were preserved. GitOps `45ae6e4` removed the superseded directory; source CI pins that cleaned revision. All 64 script/platform tests passed with updated publisher/recovery paths; source and GitOps recovery helpers are synchronized.
 
 ## Two-Application bootstrap and ownership
 

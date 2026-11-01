@@ -2,6 +2,14 @@
 
 Earlier baseline verified locally on October 29, 2026. CI workflows define repeatable checks; remote run results are available in the repository's GitHub Actions. AWS test apply progress is recorded separately below; earlier local results do not imply a completed cloud deployment.
 
+## November 1 unified chart and override layout
+
+The current GitOps layout places nucleus at `helm-templates/nucleus` (provenance at `helm-templates/nucleus-source.json`) and Application definitions' values at `helm-overides/argocd-app-controller/custom-values.yaml`. The generic chart remains `helm-templates/argocd-app-controller`; frontend/backend overrides retain their existing locations. Superseded `helm-common` and `bootstrap/idea-board-applications.yaml` paths were removed after the live cutover. Bootstrap retains only the scoped AppProject manifest.
+
+Application rendering, release publication, recovery, CI, tests and operator commands now use the new paths. Source and GitOps recovery helpers remain identical. Original nucleus files and checksums were preserved; frontend/backend renders compared equal before/after the move. All 64 script/platform tests passed, plus Helm and workflow lint.
+
+Helm bootstrap release `idea-board-test-apps` revision 2 installed the new Application values. Private API verification confirmed both Applications actually compared `helm-templates/nucleus`, with Synced/Healthy status and no conditions. All eight managed resources retained identical UIDs and specifications. The old directory was then removed in GitOps `45ae6e4`; source CI pins that cleaned revision. GitOps validation rejects reintroduction of the old chart directory or old bootstrap values file. Immutable release snapshots remain recovery inputs and were preserved.
+
 ## November 1 separate Argo Applications and repository ownership
 
 This supersedes the earlier single-Application bootstrap. GitOps commit `de890e7` adds reusable chart `helm-templates/argocd-app-controller`, two-Application values `bootstrap/idea-board-applications.yaml` and separate scoped AppProject `bootstrap/idea-board-project.yaml`. The obsolete combined bootstrap manifest was removed. Source commit `56b646d` pins that reviewed GitOps revision, upgrades the private bootstrap command and removes an obsolete source-scanner exclusion. The application repository tracks no `helm-common`, `helm-overides` or `helm-templates` paths; a CI ownership check prevents reintroduction.

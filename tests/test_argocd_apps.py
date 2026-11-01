@@ -17,7 +17,9 @@ class ArgoApplicationsTests(unittest.TestCase):
     def setUp(self):
         self.chart = GITOPS_ROOT / "helm-templates/argocd-app-controller"
         self.values = yaml.safe_load(
-            (GITOPS_ROOT / "bootstrap/idea-board-applications.yaml").read_text()
+            (
+                GITOPS_ROOT / "helm-overides/argocd-app-controller/custom-values.yaml"
+            ).read_text()
         )
 
     def render(self, values, success=True):
@@ -49,6 +51,10 @@ class ArgoApplicationsTests(unittest.TestCase):
         self.assertEqual(set(apps), {"idea-board-backend", "idea-board-frontend"})
         backend, frontend = apps["idea-board-backend"], apps["idea-board-frontend"]
         self.assertEqual(len(backend["spec"]["sources"]), 2)
+        self.assertEqual(
+            backend["spec"]["sources"][0]["path"], "helm-templates/nucleus"
+        )
+        self.assertEqual(frontend["spec"]["source"]["path"], "helm-templates/nucleus")
         self.assertEqual(
             backend["spec"]["sources"][1]["directory"], {"include": "controls.yaml"}
         )
