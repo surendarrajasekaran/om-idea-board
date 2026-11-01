@@ -28,6 +28,16 @@ The personal GitHub token lacks the `workflow` scope and its device authorizatio
 
 The GitOps implementation adds nine meaningful cases to the preceding 35-script suite, including immutable history, snapshot corruption, stale recovery, recovery preserving security/Secret references while restoring images/resources, no-first-release recovery, provider response validation and matching frontend/backend identity. The shared Terraform suite adds ECR coverage. The 13 PostgreSQL and three React cases bring the distinct application/platform total to 60; repeat backend runs are not counted twice.
 
+## November 1 GitOps recovery exercise
+
+The deliberately incompatible backend image was published in deployment commit `c2db359`. The HTTP monitor used an explicit 60-second convergence window for this controlled exercise (the scheduled default remains 600 seconds). It observed that the requested frontend/backend identity did not converge, with the previous healthy application continuing to answer readiness requests. The policy fallback committed recovery `bd79b81`, restoring the known-good application images/resources while preserving security controls and Secret references.
+
+Argo CD applied recovery release `recovery-1793509010408156000`. Both public release identities matched; 20 readiness samples had zero failures, a real create/read smoke passed and verification idea 2 was created. Verification idea 1 from the baseline remained readable, demonstrating data persistence across this recovery. Healthy-state commit `26d6c69` cleared `rollback_pending`. This was real Git-to-Argo application recovery, driven by a manual invocation of the prepared health helper; it was not a live model decision or a remotely scheduled Actions run.
+
+The private administration session expired during a controller Helm update, leaving a pending Helm revision. Restoring its last deployed controller revision and retrying the configuration update succeeded. This controller maintenance recovery is separate from the application's GitOps recovery.
+
+The further cost change that scales the unused ApplicationSet controller to zero is committed in source configuration and awaits renewed AWS SSO access to apply. The chart ignores an `applicationSet.enabled` setting; the corrected configuration uses `replicas: 0` and was render-verified.
+
 ## October 31 platform/security verification
 
 These results cover local changes after `6349e55`, not a new published GitHub run or cloud deployment. Detailed scope, exceptions and remaining risks are in [the platform review](platform-review.md).
@@ -104,7 +114,7 @@ The local preview uses Docker Compose at http://localhost:8080. Test ideas remai
 | Release/deployment workflow run | Pending | Pending |
 | Smoke test | Public create/read passed | Pending |
 | Health report | Keep, policy-fallback; HTTP-only | Pending |
-| Rollback exercise | Pending | Pending |
+| Rollback exercise | Verified Git recovery and public create/read; baseline data persisted | Pending |
 
 Replace pending entries only with observed results. The deployment acceptance criteria are: public frontend works, new idea persists and appears through the API, database remains private, readiness passes, and a deliberately failed release returns to the prior verified healthy application through a GitOps recovery commit.
 

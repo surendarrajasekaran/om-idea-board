@@ -7,6 +7,10 @@ Historical baseline updated October 30, 2026. This is a project handoff for a ne
 The October 31 platform/security and GitOps changes supersede baseline commit `6349e55`. Read Git status and [verification](verification.md) for publication and deployment evidence. AWS test provisioning in account `812752207041` / `us-west-2` has created private RDS, ECR, an exact-environment GitHub publisher role and KMS-backed state storage. EKS/NAT/worker and Argo CD are created. Public frontend/backend identity and create/read checks passed; a healthy baseline is committed to the deployment repository. The backend uses a nonprivileged ideas_app role with TLS 1.3, and live pod egress restrictions were verified. No live AI success is claimed. New source/workflow publication awaits the personal GitHub token workflow scope; the deployment repository is published, with its scheduled workflow still local. Follow [the GitOps guide](gitops.md) for the current two-repository deployment model; use the older direct Helm flow below only for other targets.
 
 
+### November 1 observed recovery
+
+The failed test release `rollback-drill-20261031` was recovered through Git commit `bd79b81` and Argo reconciliation. The healthy recovery is `recovery-1793509010408156000`; commit `26d6c69` records verified health and clears pending recovery. Public release identities and create/read passed, and the baseline verification idea persisted. The test used a 60-second convergence override and deterministic fallback, not a live model. GitHub Actions files still need the personal token's workflow authorization, and AWS SSO expired overnight. The further ApplicationSet zero-replica optimization is committed/rendered but awaits reauthentication to apply.
+
 ### AWS test GitOps continuation
 
 - Source repository: `surendarrajasekaran/om-idea-board`; deployment repository: `surendarrajasekaran/infra-helm-charts`.
