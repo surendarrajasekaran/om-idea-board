@@ -187,6 +187,13 @@ class GitOpsPublishingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.repository(root / "gitops")
+            backend_file = root / "gitops/helm-overides/idea-be/custom-values.yaml"
+            backend_values = yaml.safe_load(backend_file.read_text())
+            backend_values["envFrom"] = [
+                {"secretRef": {"name": "rotated-runtime-secret"}}
+            ]
+            backend_values["volumes"][0]["secret"]["secretName"] = "rotated-ca-secret"
+            backend_file.write_text(yaml.safe_dump(backend_values))
             profile = root / "profile.json"
             profile.write_text(
                 json.dumps(
@@ -226,6 +233,15 @@ class GitOpsPublishingTests(unittest.TestCase):
             self.assertEqual(metadata["images"], selected)
             self.assertEqual(metadata["source_commit"], "a" * 40)
             self.assertEqual(metadata["delivery"], "helm")
+            backend_values = yaml.safe_load(backend_file.read_text())
+            self.assertEqual(
+                backend_values["envFrom"],
+                [{"secretRef": {"name": "rotated-runtime-secret"}}],
+            )
+            self.assertEqual(
+                backend_values["volumes"][0]["secret"]["secretName"],
+                "rotated-ca-secret",
+            )
             self.assertFalse((root / "gitops/charts").exists())
             for component, folder in [("frontend", "idea-fe"), ("backend", "idea-be")]:
                 values = yaml.safe_load(
