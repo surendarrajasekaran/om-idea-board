@@ -96,11 +96,11 @@ CI updates `helm-overides/idea-fe/custom-values.yaml` and `helm-overides/idea-be
 
 Open **Actions → Check live AI provider → Run workflow** on `main`. This workflow plans only and requires a live accepted response; it does not deploy.
 
-> Cost-sensitive test environment for a small team. Keep one replica per service and at most 250m CPU. Request 256Mi memory per service. Explain the sizing trade-offs, availability limitations, assumptions and post-deployment checks.
+> Cost-sensitive test environment for a small team. Keep a two-replica minimum per service and at most 250m CPU. Request 256Mi memory per service. Explain the sizing trade-offs, availability limitations, assumptions and post-deployment checks.
 
 In **Summary → AI resource plan**, show the goal, accepted settings and **AI detailed decision explanation**. Ten sections cover interpretation, replica/CPU/memory choices, alternatives, assumptions, risks, cost impact, verification and unsupported requests. Planning asks for approximately 500–750 words; actual length varies. Model, response ID, token usage and duration appear when returned. **Pipeline policy checks** are separate. Download `live-ai-check` for the structured response. The same report appears in the release workflow.
 
-Current test policy permits **one replica per service**, CPU requests of **100m or 250m**, and memory requests of **128Mi, 256Mi or 512Mi**. One shared profile applies to both service containers. Fixed limits remain **1 CPU / 512Mi**; init-container resources and Terraform infrastructure are unchanged. Requests affect scheduling and resource shares; changing them alone does not reduce a fixed-size worker's bill.
+Current test policy permits **a two- or three-replica baseline per service**, CPU requests of **100m or 250m**, and memory requests of **128Mi, 256Mi or 512Mi**. One shared profile applies to both service containers. With HPA enabled, the planned replica count sets each HPA minimum; the two HPAs scale independently up to four pods per service at 70% average CPU utilization. GitOps owns that maximum and target, and Argo ignores only the live Deployment replica field. Lowering CPU requests also lowers the absolute CPU threshold that triggers scaling. Fixed limits remain **1 CPU / 512Mi**; init-container resources and Terraform infrastructure are unchanged. Requests affect scheduling and resource shares; changing them alone does not reduce the fixed-size workers' bill.
 
 Planning uses one call with a 3,000-output-token cap and 45-second timeout, without automatic retries. Model output is schema/policy-validated and never executed as commands. An unavailable or rejected proposal produces labeled `policy-fallback`, unless live AI was required. API charges and quotas depend on the configured provider project.
 
@@ -136,3 +136,11 @@ make security-check
 ```
 
 Local backend tests can use SQLite; CI also tests PostgreSQL and database-role restrictions. CI fetches the chart revision in `.github/gitops-source.json`. When changing shared chart contracts or health/recovery helpers, review the corresponding source pins in both repositories.
+
+## Availability and autoscaling
+
+Both services use the unchanged nucleus chart with HPA enabled in the GitOps values: minimum two, maximum four, CPU target 70% of requested CPU. The AI can propose a minimum of two or three; it cannot change the maximum, target or placement rules. Scale-up waits 30 seconds and adds at most one pod per minute; scale-down waits five minutes and removes at most one pod per minute. These are starting settings, not measured capacity guarantees.
+
+Terraform installs the EKS Metrics Server add-on and defaults to two worker nodes. Pod anti-affinity prefers different hosts and zones, with a hostname spread constraint to limit skew. PDB `minAvailable: 1` allows one voluntary disruption at the two-pod baseline; it does not protect against involuntary node failure. The managed node group maximum is only a bound: no Cluster Autoscaler or Karpenter is installed, so HPA growth depends on existing node capacity. At four backend replicas, the configured connection pools can consume up to 40 PostgreSQL connections, plus migration and rollout connections; validate the DB connection budget before raising the cap.
+
+Recovery restores prior images and container resources while preserving current HPA bounds, placement, security and Secret references. Old single-replica recovery snapshots cannot disable the current HPA availability policy. Resource changes affect the utilization denominator, so verify scaling again after an AI sizing change. See the [GitOps scaling checks](https://github.com/surendarrajasekaran/infra-helm-charts#availability-and-autoscaling).

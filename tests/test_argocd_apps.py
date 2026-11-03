@@ -66,7 +66,22 @@ class ArgoApplicationsTests(unittest.TestCase):
             self.assertEqual(app["metadata"]["namespace"], "argocd")
             self.assertEqual(app["spec"]["project"], "idea-board-test")
             self.assertEqual(app["spec"]["destination"]["namespace"], "idea-board-test")
-            self.assertNotIn("ignoreDifferences", app["spec"])
+            self.assertEqual(
+                app["spec"]["ignoreDifferences"],
+                [
+                    {
+                        "group": "apps",
+                        "kind": "Deployment",
+                        "name": app["metadata"]["name"],
+                        "namespace": "idea-board-test",
+                        "jsonPointers": ["/spec/replicas"],
+                    }
+                ],
+            )
+            self.assertIn(
+                "RespectIgnoreDifferences=true",
+                app["spec"]["syncPolicy"]["syncOptions"],
+            )
             self.assertNotIn("finalizers", app["metadata"])
             self.assertIn(
                 "FailOnSharedResource=true", app["spec"]["syncPolicy"]["syncOptions"]

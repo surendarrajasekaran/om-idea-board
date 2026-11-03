@@ -44,6 +44,20 @@ def publish(args):
         data = yaml.safe_load((args.gitops_dir / file).read_text())
         if data.get("fullnameOverride") != f"{args.name}-{component}":
             raise ValueError("GitOps component names do not match the requested target")
+        autoscaling = data.get("autoscaling", {})
+        if autoscaling.get("enabled"):
+            minimum = resources["workload"]["replicaCount"]
+            maximum = autoscaling.get("maxReplicas")
+            if (
+                autoscaling.get("type") != "hpa"
+                or type(maximum) is not int
+                or not 2 <= minimum <= maximum <= 4
+            ):
+                raise ValueError(
+                    "HPA requires 2 <= planned minimum <= configured maximum <= 4"
+                )
+            # AI sets the bounded baseline; HPA owns the live Deployment scale.
+            data["autoscaling"]["minReplicas"] = minimum
         image = image_values(getattr(args, f"{component}_image"))
         # Image coordinates, bounded resources and release identity are CI-owned.
         # Preserve all other current GitOps settings, including rotated Secret/CA refs.

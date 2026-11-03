@@ -49,10 +49,10 @@ def resource_values(profile, environment, cloud):
     if environment == "production" and values["replicas"] < 2:
         raise ValueError("Production requires at least two replicas")
     if environment == "test" and (
-        values["replicas"] != 1 or values["cpu_request"] == "500m"
+        values["replicas"] not in (2, 3) or values["cpu_request"] == "500m"
     ):
         raise ValueError(
-            "Single-worker test policy requires one replica and at most 250m CPU per component"
+            "Test availability policy requires two or three replicas and at most 250m CPU per component"
         )
     cpu, memory = values["cpu_request"], values["memory_request"]
     # Portable minimums accommodate GKE Autopilot general-purpose pods.

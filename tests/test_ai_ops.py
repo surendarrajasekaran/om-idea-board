@@ -42,7 +42,7 @@ class ActionsReportTests(unittest.TestCase):
             "source": "live-ai",
             "environment": "test",
             "profile": {
-                "replicas": 1,
+                "replicas": 2,
                 "cpu_request": "250m",
                 "memory_request": "128Mi",
                 "rationale": rationale,
@@ -56,7 +56,7 @@ class ActionsReportTests(unittest.TestCase):
         self.assertIn('"goal": "Keep test costs low"', output)
         self.assertIn('"source": "live-ai"', output)
         self.assertIn("AI resource plan", summary)
-        self.assertIn("Replicas per Deployment", summary)
+        self.assertIn("Replica baseline / HPA minimum per service", summary)
         self.assertIn("250m", summary)
         self.assertIn("128Mi", summary)
         self.assertIn("Live AI response accepted", summary)
@@ -268,9 +268,9 @@ class GeminiTests(unittest.TestCase):
         self.assertIn("HTTP 429", str(caught.exception))
 
     def test_gemini_cannot_exceed_test_resource_policy(self):
-        for changes in ({"replicas": 2}, {"cpu_request": "500m"}):
+        for changes in ({"replicas": 1}, {"cpu_request": "500m"}):
             proposal = {
-                "replicas": 1,
+                "replicas": 2,
                 "cpu_request": "250m",
                 "memory_request": "256Mi",
                 "rationale": "Test",
@@ -318,7 +318,7 @@ class GeminiTests(unittest.TestCase):
 class DetailedPlanningTests(unittest.TestCase):
     def setUp(self):
         self.profile = {
-            "replicas": 1,
+            "replicas": 2,
             "cpu_request": "250m",
             "memory_request": "256Mi",
             "rationale": "Bounded test sizing",
@@ -373,7 +373,7 @@ class DetailedPlanningTests(unittest.TestCase):
             body["generationConfig"]["responseJsonSchema"], PLANNING_SCHEMA
         )
         payload = json.loads(body["contents"][0]["parts"][0]["text"])
-        self.assertEqual(payload["constraints"]["allowed_replicas"], [1])
+        self.assertEqual(payload["constraints"]["allowed_replicas"], [2, 3])
         self.assertEqual(
             payload["constraints"]["allowed_cpu_requests"], ["100m", "250m"]
         )
@@ -444,13 +444,13 @@ class DetailedPlanningTests(unittest.TestCase):
         self.assertEqual(report["fallback_reason"], "offline")
 
     def test_detailed_explanations_do_not_override_the_replica_guard(self):
-        self.profile["replicas"] = 2
+        self.profile["replicas"] = 1
         with patch(
             "scripts.ai_ops.urllib.request.urlopen",
             return_value=io.BytesIO(json.dumps(self.envelope()).encode()),
         ):
-            with self.assertRaisesRegex(AIUnavailable, "Single-worker test policy"):
-                plan("test", "Two frontend replicas", require_ai=True)
+            with self.assertRaisesRegex(AIUnavailable, "Test availability policy"):
+                plan("test", "One frontend replica", require_ai=True)
 
 
 class AIOpsTests(unittest.TestCase):

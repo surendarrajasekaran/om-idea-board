@@ -201,7 +201,7 @@ class GitOpsPublishingTests(unittest.TestCase):
                         "environment": "test",
                         "source": "policy-fallback",
                         "profile": {
-                            "replicas": 1,
+                            "replicas": 3,
                             "cpu_request": "250m",
                             "memory_request": "128Mi",
                             "rationale": "Test canonical chart publishing",
@@ -210,25 +210,32 @@ class GitOpsPublishingTests(unittest.TestCase):
                 )
             )
             selected = images("a")
-            publish(
-                argparse.Namespace(
-                    gitops_dir=root / "gitops",
-                    target="idea-board-aws-test",
-                    release_id="canonical-chart",
-                    source_commit="a" * 40,
-                    name="idea-board",
-                    cloud="aws",
-                    environment="test",
-                    profile=profile,
-                    frontend_image=selected["frontend"],
-                    backend_image=selected["backend"],
-                    tls_secret="",
-                    public_host="",
-                    public_url="http://example.test",
-                    require_ai=False,
-                    database_egress_cidr=["10.40.32.0/20"],
-                )
+            args = argparse.Namespace(
+                gitops_dir=root / "gitops",
+                target="idea-board-aws-test",
+                release_id="canonical-chart",
+                source_commit="a" * 40,
+                name="idea-board",
+                cloud="aws",
+                environment="test",
+                profile=profile,
+                frontend_image=selected["frontend"],
+                backend_image=selected["backend"],
+                tls_secret="",
+                public_host="",
+                public_url="http://example.test",
+                require_ai=False,
+                database_egress_cidr=["10.40.32.0/20"],
             )
+            backend_values["autoscaling"]["maxReplicas"] = 2
+            backend_file.write_text(yaml.safe_dump(backend_values))
+            with self.assertRaisesRegex(ValueError, "HPA requires"):
+                publish(args)
+            self.assertIsNone(current(root / "gitops", "idea-board-aws-test"))
+            self.assertEqual(yaml.safe_load(backend_file.read_text()), backend_values)
+            backend_values["autoscaling"]["maxReplicas"] = 4
+            backend_file.write_text(yaml.safe_dump(backend_values))
+            publish(args)
             metadata = current(root / "gitops", "idea-board-aws-test")
             self.assertEqual(metadata["images"], selected)
             self.assertEqual(metadata["source_commit"], "a" * 40)
@@ -259,6 +266,8 @@ class GitOpsPublishingTests(unittest.TestCase):
                 )
                 self.assertEqual(values["env"]["RELEASE_ID"], "canonical-chart")
                 self.assertEqual(values["resources"]["requests"]["memory"], "128Mi")
+                self.assertEqual(values["autoscaling"]["minReplicas"], 3)
+                self.assertEqual(values["autoscaling"]["maxReplicas"], 4)
             for component in ("frontend", "backend"):
                 path = (
                     root
@@ -280,6 +289,15 @@ class GitOpsPublishingTests(unittest.TestCase):
                     {"name": "RELEASE_ID", "value": "canonical-chart"}, container["env"]
                 )
                 self.assertEqual(container["resources"]["requests"]["memory"], "128Mi")
+                self.assertNotIn("replicas", deployment["spec"])
+                self.assertEqual(
+                    next(
+                        doc
+                        for doc in documents
+                        if doc["kind"] == "HorizontalPodAutoscaler"
+                    )["spec"]["minReplicas"],
+                    3,
+                )
 
     def test_helm_recovery_updates_values_preserving_current_security_and_secrets(self):
         self.exercise_helm_recovery(False)
@@ -287,7 +305,10 @@ class GitOpsPublishingTests(unittest.TestCase):
     def test_helm_recovery_accepts_pre_migration_snapshots(self):
         self.exercise_helm_recovery(True)
 
-    def exercise_helm_recovery(self, legacy):
+    def test_helm_recovery_from_single_replica_keeps_current_availability_policy(self):
+        self.exercise_helm_recovery(True, previous_static=True)
+
+    def exercise_helm_recovery(self, legacy, previous_static=False):
         from scripts.gitops_state import VALUE_FILES, helm_manifests
 
         with tempfile.TemporaryDirectory() as directory:
@@ -298,6 +319,9 @@ class GitOpsPublishingTests(unittest.TestCase):
                 for component, file in VALUE_FILES.items()
             }
             for component, data in values.items():
+                if previous_static:
+                    data["autoscaling"]["enabled"] = False
+                    data["workload"]["replicaCount"] = 1
                 data["image"].update(
                     repository=f"example.com/board/{component}",
                     tag="release@sha256:" + "a" * 64,
@@ -327,6 +351,9 @@ class GitOpsPublishingTests(unittest.TestCase):
                     (archive / file).unlink()
             mark_healthy(root, "idea-board-aws-test", "healthy")
             for component, data in values.items():
+                data["autoscaling"]["enabled"] = True
+                data["autoscaling"]["minReplicas"] = 2
+                data["workload"]["replicaCount"] = 2
                 data["image"]["tag"] = "release@sha256:" + "b" * 64
                 data["resources"]["requests"] = {"cpu": "250m", "memory": "256Mi"}
                 data["env"]["RELEASE_ID"] = "failed"
@@ -353,6 +380,30 @@ class GitOpsPublishingTests(unittest.TestCase):
             self.assertEqual(backend["image"]["tag"], "release@sha256:" + "a" * 64)
             self.assertEqual(backend["env"]["RELEASE_ID"], recovery["id"])
             self.assertEqual(recovery["delivery"], "helm")
+            self.assertEqual(backend["autoscaling"]["minReplicas"], 2)
+            self.assertEqual(backend["autoscaling"]["maxReplicas"], 4)
+            recovered_docs = list(
+                yaml.safe_load_all(
+                    (
+                        root
+                        / f"releases/idea-board-aws-test/{recovery['id']}/backend.yaml"
+                    ).read_text()
+                )
+            )
+            self.assertNotIn(
+                "replicas",
+                next(doc for doc in recovered_docs if doc["kind"] == "Deployment")[
+                    "spec"
+                ],
+            )
+            self.assertEqual(
+                next(
+                    doc
+                    for doc in recovered_docs
+                    if doc["kind"] == "HorizontalPodAutoscaler"
+                )["spec"]["minReplicas"],
+                2,
+            )
             self.assertEqual(
                 (
                     root / "argocd-manifests/idea-board-aws-test/controls.yaml"

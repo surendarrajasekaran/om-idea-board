@@ -65,6 +65,18 @@ class DeploymentPolicyTests(unittest.TestCase):
             result["resources"]["requests"], {"cpu": "500m", "memory": "512Mi"}
         )
 
+    def test_test_profile_requires_available_but_bounded_baseline(self):
+        self.profile["environment"] = "test"
+        for replicas in (2, 3):
+            self.profile["profile"]["replicas"] = replicas
+            result = resource_values(self.profile, "test", "aws")
+            self.assertEqual(result["workload"]["replicaCount"], replicas)
+        for change in ({"replicas": 1}, {"replicas": 4}, {"cpu_request": "500m"}):
+            self.profile["profile"].update(replicas=2, cpu_request="250m")
+            self.profile["profile"].update(change)
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                resource_values(self.profile, "test", "aws")
+
 
 @unittest.skipUnless(shutil.which("helm"), "Helm is required for chart contract tests")
 class CommonChartTests(unittest.TestCase):
@@ -100,6 +112,59 @@ class CommonChartTests(unittest.TestCase):
                     item for item in documents if item and item["kind"] == "Service"
                 )
                 pod = deployment["spec"]["template"]["spec"]
+                self.assertNotIn("replicas", deployment["spec"])
+                hpa = next(
+                    item
+                    for item in documents
+                    if item and item["kind"] == "HorizontalPodAutoscaler"
+                )
+                self.assertEqual(hpa["apiVersion"], "autoscaling/v2")
+                self.assertEqual(hpa["spec"]["minReplicas"], 2)
+                self.assertEqual(hpa["spec"]["maxReplicas"], 4)
+                self.assertEqual(
+                    hpa["spec"]["scaleTargetRef"]["name"],
+                    deployment["metadata"]["name"],
+                )
+                self.assertEqual(
+                    hpa["spec"]["metrics"],
+                    [
+                        {
+                            "type": "Resource",
+                            "resource": {
+                                "name": "cpu",
+                                "target": {
+                                    "type": "Utilization",
+                                    "averageUtilization": 70,
+                                },
+                            },
+                        }
+                    ],
+                )
+                self.assertEqual(
+                    hpa["spec"]["behavior"]["scaleDown"]["stabilizationWindowSeconds"],
+                    300,
+                )
+                selector = deployment["spec"]["selector"]["matchLabels"]
+                anti = pod["affinity"]["podAntiAffinity"][
+                    "preferredDuringSchedulingIgnoredDuringExecution"
+                ]
+                self.assertEqual(
+                    {item["podAffinityTerm"]["topologyKey"] for item in anti},
+                    {"kubernetes.io/hostname", "topology.kubernetes.io/zone"},
+                )
+                for item in anti:
+                    labels = item["podAffinityTerm"]["labelSelector"]["matchLabels"]
+                    self.assertTrue(labels.items() <= selector.items())
+                for item in pod["topologySpreadConstraints"]:
+                    self.assertTrue(
+                        item["labelSelector"]["matchLabels"].items() <= selector.items()
+                    )
+                pdb = next(
+                    item
+                    for item in documents
+                    if item and item["kind"] == "PodDisruptionBudget"
+                )
+                self.assertEqual(pdb["spec"]["minAvailable"], 1)
                 self.assertFalse(pod["automountServiceAccountToken"])
                 self.assertEqual(
                     service["spec"]["type"],

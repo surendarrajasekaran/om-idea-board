@@ -261,7 +261,23 @@ def recover_images(root, target, expected):
             if len(containers) != 1:
                 raise ValueError("Missing application container in recovery snapshot")
             data["image"].update(image_coordinates(previous["images"][component]))
-            data["workload"]["replicaCount"] = deployment["spec"]["replicas"]
+            if not data.get("autoscaling", {}).get("enabled"):
+                prior_hpa = next(
+                    (
+                        item
+                        for item in prior
+                        if item and item.get("kind") == "HorizontalPodAutoscaler"
+                    ),
+                    {},
+                )
+                replicas = deployment["spec"].get(
+                    "replicas", prior_hpa.get("spec", {}).get("minReplicas")
+                )
+                if type(replicas) is not int or replicas < 1:
+                    raise ValueError("Recovery snapshot has no valid replica baseline")
+                data["workload"]["replicaCount"] = replicas
+            # Keep current HPA bounds and scheduling policy, even for older
+            # single-replica snapshots. Never write an HPA-owned live scale.
             data["resources"] = containers[0]["resources"]
             data.setdefault("env", {})["RELEASE_ID"] = replacement_id
             data.setdefault("podAnnotations", {}).update(
