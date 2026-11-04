@@ -14,3 +14,4 @@ COPY --from=build /app/dist /usr/share/nginx/html
 USER 101
 # Exposing it to the outside world
 EXPOSE 8080
+# fixed
