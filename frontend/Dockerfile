@@ -12,4 +12,5 @@ RUN apk upgrade --no-cache && mkdir -p /etc/nginx/templates && printf 'limit_req
 COPY nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 USER 101
+# Exposing it to the outside world
 EXPOSE 8080
